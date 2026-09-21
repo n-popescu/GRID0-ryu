@@ -17951,12 +17951,12 @@
       }
     },
     {
-      "ID": "SettingsTabNetworkSwitchNetDeviceAccountId",
+      "ID": "SettingsTabNetworkSwitchNetUsername",
       "Translations": {
         "ar_SA": null,
         "de_DE": null,
         "el_GR": null,
-        "en_US": "Device Account ID",
+        "en_US": "Username",
         "es_ES": null,
         "fr_FR": null,
         "he_IL": null,
@@ -17976,12 +17976,12 @@
       }
     },
     {
-      "ID": "SettingsTabNetworkSwitchNetDeviceAccountIdTooltip",
+      "ID": "SettingsTabNetworkSwitchNetUsernameTooltip",
       "Translations": {
         "ar_SA": null,
         "de_DE": null,
         "el_GR": null,
-        "en_US": "The SwitchNet device account to log in as -- 16 hex characters.\n\nCreate one on the server with:\n  switchnetctl account create -device-account-id <id> -password <password> -nickname <name>\n\nThis is a credential for your own private server. It is not a Nintendo account and cannot be used as one.",
+        "en_US": "The username you chose when you registered at http://<your-server>/register.\n\nThis is a credential for your own private server. It is not a Nintendo account and cannot be used as one.",
         "es_ES": null,
         "fr_FR": null,
         "he_IL": null,
@@ -18001,12 +18001,12 @@
       }
     },
     {
-      "ID": "SettingsTabNetworkSwitchNetDeviceAccountIdWatermark",
+      "ID": "SettingsTabNetworkSwitchNetUsernameWatermark",
       "Translations": {
         "ar_SA": null,
         "de_DE": null,
         "el_GR": null,
-        "en_US": "0123456789abcdef",
+        "en_US": "your-username",
         "es_ES": null,
         "fr_FR": null,
         "he_IL": null,
@@ -18056,7 +18056,7 @@
         "ar_SA": null,
         "de_DE": null,
         "el_GR": null,
-        "en_US": "The password for that device account.\n\nStored in the clear in Config.json, so treat it as you would any other password kept in a config file. It only ever authenticates to the server named above.",
+        "en_US": "The password for that SwitchNet account.\n\nStored in the clear in Config.json, so treat it as you would any other password kept in a config file. It only ever authenticates to the server named above.",
         "es_ES": null,
         "fr_FR": null,
         "he_IL": null,

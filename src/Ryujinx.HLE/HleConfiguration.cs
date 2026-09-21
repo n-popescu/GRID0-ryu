@@ -188,13 +188,15 @@ namespace Ryujinx.HLE
         public string SwitchNetServer { internal get; set; }
 
         /// <summary>
-        /// The SwitchNet device account id to log in as. Create one on the server with
-        /// 'switchnetctl account create'.
+        /// The username chosen at self-registration on the server's own
+        /// "/register" page. The same credential a person types there, not
+        /// anything console- or device-shaped -- SwitchNetAccountClient logs in
+        /// with this directly, the same way a browser would.
         /// </summary>
-        public string SwitchNetDeviceAccountId { internal get; set; }
+        public string SwitchNetUsername { internal get; set; }
 
         /// <summary>
-        /// That device account's password. A credential for the operator's own private
+        /// That person's password. A credential for the operator's own private
         /// server; it is not a Nintendo password and cannot be used as one.
         /// </summary>
         public string SwitchNetPassword { internal get; set; }
@@ -330,7 +332,7 @@ namespace Ryujinx.HLE
                                 string privateServerAddress,
                                 string privateServerNatCheckSecondaryAddress,
                                 string switchNetServer,
-                                string switchNetDeviceAccountId,
+                                string switchNetUsername,
                                 string switchNetPassword,
                                 IntegrityCheckLevel fsIntegrityCheckLevel,
                                 int fsGlobalAccessLogMode,
@@ -369,7 +371,7 @@ namespace Ryujinx.HLE
             PrivateServerAddress = privateServerAddress;
             PrivateServerNatCheckSecondaryAddress = privateServerNatCheckSecondaryAddress;
             SwitchNetServer = switchNetServer;
-            SwitchNetDeviceAccountId = switchNetDeviceAccountId;
+            SwitchNetUsername = switchNetUsername;
             SwitchNetPassword = switchNetPassword;
             FsIntegrityCheckLevel = fsIntegrityCheckLevel;
             FsGlobalAccessLogMode = fsGlobalAccessLogMode;

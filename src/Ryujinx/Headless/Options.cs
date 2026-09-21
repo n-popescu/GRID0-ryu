@@ -52,8 +52,8 @@ namespace Ryujinx.Headless
             if (NeedsOverride(nameof(SwitchNetServer)))
                 SwitchNetServer = configurationState.System.SwitchNetServer;
 
-            if (NeedsOverride(nameof(SwitchNetDeviceAccountId)))
-                SwitchNetDeviceAccountId = configurationState.System.SwitchNetDeviceAccountId;
+            if (NeedsOverride(nameof(SwitchNetUsername)))
+                SwitchNetUsername = configurationState.System.SwitchNetUsername;
 
             if (NeedsOverride(nameof(SwitchNetPassword)))
                 SwitchNetPassword = configurationState.System.SwitchNetPassword;
@@ -336,10 +336,10 @@ namespace Ryujinx.Headless
         [Option("switchnet-server", Required = false, Default = "", HelpText = "Address of the SwitchNet server for the emulator's own account login, e.g. 192.168.1.50 or 192.168.1.50:443.")]
         public string SwitchNetServer { get; set; }
 
-        [Option("switchnet-device-account-id", Required = false, Default = "", HelpText = "SwitchNet device account id to log in as. Create one with 'switchnetctl account create'.")]
-        public string SwitchNetDeviceAccountId { get; set; }
+        [Option("switchnet-username", Required = false, Default = "", HelpText = "Username to log in with, chosen at self-registration on the SwitchNet server's own /register page.")]
+        public string SwitchNetUsername { get; set; }
 
-        [Option("switchnet-password", Required = false, Default = "", HelpText = "Password for the SwitchNet device account.")]
+        [Option("switchnet-password", Required = false, Default = "", HelpText = "Password for that SwitchNet account.")]
         public string SwitchNetPassword { get; set; }
 
         [Option("disable-fs-integrity-checks", Required = false, HelpText = "Disables integrity checks on Game content files.")]

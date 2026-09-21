@@ -109,7 +109,7 @@ namespace Ryujinx.Ava.Systems.Configuration
             System.PrivateServerAddress.Value = cff.PrivateServerAddress ?? string.Empty;
             System.PrivateServerNatCheckSecondaryAddress.Value = cff.PrivateServerNatCheckSecondaryAddress ?? string.Empty;
             System.SwitchNetServer.Value = cff.SwitchNetServer ?? string.Empty;
-            System.SwitchNetDeviceAccountId.Value = cff.SwitchNetDeviceAccountId ?? string.Empty;
+            System.SwitchNetUsername.Value = cff.SwitchNetUsername ?? string.Empty;
             System.SwitchNetPassword.Value = cff.SwitchNetPassword ?? string.Empty;
             System.EnableFsIntegrityChecks.Value = cff.EnableFsIntegrityChecks;
             System.FsGlobalAccessLogMode.Value = cff.FsGlobalAccessLogMode;
@@ -585,7 +585,7 @@ namespace Ryujinx.Ava.Systems.Configuration
                     // is exactly what it got before this existed.
 
                     cff.SwitchNetServer = string.Empty;
-                    cff.SwitchNetDeviceAccountId = string.Empty;
+                    cff.SwitchNetUsername = string.Empty;
                     cff.SwitchNetPassword = string.Empty;
                 }),
                 (78, static cff =>
@@ -596,6 +596,21 @@ namespace Ryujinx.Ava.Systems.Configuration
 
                     cff.PrivateServerAddress = string.Empty;
                     cff.PrivateServerNatCheckSecondaryAddress = string.Empty;
+                }),
+                (79, static cff =>
+                {
+                    // SwitchNet login moved from a device account id (created with
+                    // 'switchnetctl account create', server-generated and unmemorable)
+                    // to the same username a person already chose at self-registration
+                    // on the server's own /register page. There is no sound way to
+                    // carry an old device account id forward as a username -- they are
+                    // different credentials for a different endpoint entirely -- so
+                    // this resets the field the same way 77 reset all three for a
+                    // config that had never seen them: the login goes back to
+                    // deliberately off, not silently broken with a value that used to
+                    // work and now cannot.
+
+                    cff.SwitchNetUsername = string.Empty;
                 })
             );
     }

@@ -229,7 +229,7 @@ namespace Ryujinx.Headless
                         options.PrivateServerAddress,
                         options.PrivateServerNatCheckSecondaryAddress,
                         options.SwitchNetServer,
-                        options.SwitchNetDeviceAccountId,
+                        options.SwitchNetUsername,
                         options.SwitchNetPassword,
                         !options.DisableFsIntegrityChecks ? IntegrityCheckLevel.ErrorOnInvalid : IntegrityCheckLevel.None,
                         options.FsGlobalAccessLogMode,

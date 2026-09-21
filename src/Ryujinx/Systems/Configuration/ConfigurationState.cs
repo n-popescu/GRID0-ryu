@@ -84,7 +84,7 @@ namespace Ryujinx.Ava.Systems.Configuration
                 PrivateServerAddress = System.PrivateServerAddress,
                 PrivateServerNatCheckSecondaryAddress = System.PrivateServerNatCheckSecondaryAddress,
                 SwitchNetServer = System.SwitchNetServer,
-                SwitchNetDeviceAccountId = System.SwitchNetDeviceAccountId,
+                SwitchNetUsername = System.SwitchNetUsername,
                 SwitchNetPassword = System.SwitchNetPassword,
                 EnableFsIntegrityChecks = System.EnableFsIntegrityChecks,
                 FsGlobalAccessLogMode = System.FsGlobalAccessLogMode,
@@ -228,7 +228,7 @@ namespace Ryujinx.Ava.Systems.Configuration
             System.PrivateServerAddress.Value = string.Empty;
             System.PrivateServerNatCheckSecondaryAddress.Value = string.Empty;
             System.SwitchNetServer.Value = string.Empty;
-            System.SwitchNetDeviceAccountId.Value = string.Empty;
+            System.SwitchNetUsername.Value = string.Empty;
             System.SwitchNetPassword.Value = string.Empty;
             System.EnableFsIntegrityChecks.Value = true;
             System.FsGlobalAccessLogMode.Value = 0;
