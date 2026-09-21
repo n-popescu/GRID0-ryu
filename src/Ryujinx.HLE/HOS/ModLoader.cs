@@ -704,7 +704,7 @@ namespace Ryujinx.HLE.HOS
             ApplyProgramPatches(nroPatches, 0, nro);
         }
 
-        internal bool ApplyNsoPatches(ulong applicationId, params ReadOnlySpan<IExecutable> programs)
+        internal bool ApplyNsoPatches(ulong applicationId, string privateServerAddress, params ReadOnlySpan<IExecutable> programs)
         {
             IEnumerable<Mod<DirectoryInfo>> nsoMods = _patches.NsoPatches;
 
@@ -715,7 +715,46 @@ namespace Ryujinx.HLE.HOS
 
             // NSO patches are created with offset 0 according to Atmosphere's patcher module
             // But `Program` doesn't contain the header which is 0x100 bytes. So, we adjust for that here
-            return ApplyProgramPatches(nsoMods, 0x100, programs);
+            bool patched = ApplyProgramPatches(nsoMods, 0x100, programs);
+
+            // Splatoon 3 pins its own certificates and never asks the guest OS's ssl: service to
+            // validate anything, so PrivateServerTrust -- which is where every OTHER title's
+            // private-server support lives -- never gets a say for this one. See
+            // PrivateServerSplatoon3Patches for the full explanation. Gated on a private server
+            // actually being configured: unpatched is the correct behaviour against real
+            // Nintendo, same as PrivateServerTrust itself.
+            if (applicationId == PrivateServerSplatoon3Patches.Splatoon3ApplicationId
+                && !string.IsNullOrEmpty(privateServerAddress))
+            {
+                patched |= ApplyEmbeddedSplatoon3Patches(programs);
+            }
+
+            return patched;
+        }
+
+        private static bool ApplyEmbeddedSplatoon3Patches(params ReadOnlySpan<IExecutable> programs)
+        {
+            int count = 0;
+
+            foreach (IExecutable program in programs)
+            {
+                if (program is not NsoExecutable nso)
+                {
+                    continue;
+                }
+
+                MemPatch patch = new();
+                string buildId = Convert.ToHexString(nso.BuildId).TrimEnd('0');
+
+                if (PrivateServerSplatoon3Patches.Apply(buildId, patch) == 0)
+                {
+                    continue;
+                }
+
+                count += patch.Patch(nso.Program, 0x100);
+            }
+
+            return count > 0;
         }
 
         internal void LoadCheats(ulong applicationId, ProcessTamperInfo tamperInfo, TamperMachine tamperMachine)
