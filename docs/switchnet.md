@@ -24,31 +24,29 @@ locally: the right shape, signed with an RSA key it makes up on the spot. That
 is fine against a server that never checks the signature, and useless against
 one that does — which SwitchNet does.
 
-With a login configured, the emulator performs the same three calls a console
-makes, against your server, and hands the game the token **your server signed**:
+With a login configured, the emulator logs in the way a *person* does — the
+username and password chosen at self-registration on the server's own
+`/register` page — and hands the game the token **your server signed**:
 
-1. `POST dauth /v6/device_auth_token` — a device token.
-2. `POST BAAS /1.0.0/application/token` — an anonymous access token.
-3. `POST BAAS /1.0.0/login` — the device account id and password, returning the
-   id token.
+- `POST /login` — your username and password, answered by a single response
+  carrying the id token.
 
-No Nintendo credential is presented, verified or forged anywhere in this. Every
+Not `/1.0.0/login`: that is the real, Nintendo-shaped device-account protocol
+a console uses, keyed on a device account id the emulator has no way to
+already hold. `/login` is SwitchNet's own, simpler endpoint for exactly this
+case — the server resolves (or, the first time, silently creates) a device
+account behind the scenes; you never see or need its id.
+
+No Nintendo credential is presented, verified or forged anywhere in this. The
 token involved is one your own server signed with its own key.
 
 ## Setting it up
 
 ### 1. Make an account on the server
 
-```sh
-switchnetctl account create \
-  -device-account-id 0123456789abcdef \
-  -password 'something-long' \
-  -nickname 'Me'
-```
-
-The device account id is 16 hex characters. The password is a SwitchNet
-credential for your own private server — it is not a Nintendo password and
-cannot be used as one.
+Open `https://<your-server>/register` in a browser (or wherever your operator
+told you it lives) and pick a username and password. That is the one time you
+need to think about credentials — everything after this reuses them.
 
 ### 2. Redirect the guest's traffic
 
@@ -62,8 +60,8 @@ In *Settings → Network*, under **SwitchNet Account**:
 
 - **Server** — where your server is, e.g. `192.168.1.50`, or `192.168.1.50:8443`
   if the edge is not on 443. A hostname works too.
-- **Device Account ID** — from step 1.
-- **Device Account Password** — from step 1.
+- **Username** — from step 1.
+- **Password** — from step 1.
 
 Point this at the **same server** the hosts file does. They are separate
 mechanisms and nothing forces them to agree; if they disagree, the game talks to
@@ -82,7 +80,7 @@ cause rather than a generic failure:
 
 | Log line | What to do |
 | --- | --- |
-| `invalid_device_account` | the device account id or password is wrong |
+| `login was refused (401)` | the username or password is wrong |
 | `could not reach … at <address>` | the server address is wrong, or the server is not running |
 | `is not a host or host:port` | the address field is malformed |
 | `did not finish within 10s` | the server is reachable but not answering |
@@ -90,16 +88,23 @@ cause rather than a generic failure:
 After any of these the game falls back to the locally generated token, so it
 will still start and then fail at the game server. The log line is the diagnosis.
 
-## Splatoon 3 needs one more thing
+## Splatoon 3 needs one more thing (handled automatically)
 
 Splatoon 3 does not use the console's TLS stack. Its gRPC/HTTP2 game-server
 client (NPLN) does TLS itself, over a raw socket, with its own embedded
 BoringSSL and its own pinned certificates — so the emulator only ever sees
-ciphertext and the certificate trust above cannot reach it.
+ciphertext and the certificate trust `private-servers.md` sets up cannot
+reach it. Without a fix, the game just sits on "connecting" forever, TLS
+handshake and all, once traffic is redirected to a private server.
 
-That needs the same certificate-pinning patch a real console running SwitchNet
-needs: `kinnay/NPLN-Protocols` ships `generate_patch.py`, which builds an IPS
-patch for the game's own executable. Applied as an ordinary Ryujinx
-`exefs_patches` mod. Two things worth knowing about it: it *disables*
-verification rather than adding trust, and it is keyed to the game's build id,
-so a title update silently stops it applying.
+Ryujinx-LanPlay applies the same certificate-pinning patch a real console
+running SwitchNet needs **automatically**, in memory, whenever
+**Private server address** (`private-servers.md`) is set — no
+`exefs_patches` mod to install by hand. See
+`PrivateServerSplatoon3Patches.cs` for the patch bytes and the build ids
+they cover, and `kinnay/NPLN-Protocols`' `generate_patch.py` for the tool
+that originally produces them. It *disables* certificate verification
+rather than adding trust, and it is keyed to the game's exact build: a
+title update changes the executable and can silently stop it matching. If
+Splatoon 3 stops connecting after updating the game, that table is the
+first thing to check.

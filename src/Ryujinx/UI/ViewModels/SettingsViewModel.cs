@@ -348,7 +348,7 @@ namespace Ryujinx.Ava.UI.ViewModels
 
         /// <summary>SwitchNet server address, as host or host:port. Empty disables the login.</summary>
         public string SwitchNetServer { get; set; }
-        public string SwitchNetDeviceAccountId { get; set; }
+        public string SwitchNetUsername { get; set; }
         public string SwitchNetPassword { get; set; }
         public bool EnableFsIntegrityChecks { get; set; }
         public bool IgnoreMissingServices { get; set; }
@@ -885,7 +885,7 @@ namespace Ryujinx.Ava.UI.ViewModels
             PrivateServerAddress = config.System.PrivateServerAddress;
             PrivateServerNatCheckSecondaryAddress = config.System.PrivateServerNatCheckSecondaryAddress;
             SwitchNetServer = config.System.SwitchNetServer;
-            SwitchNetDeviceAccountId = config.System.SwitchNetDeviceAccountId;
+            SwitchNetUsername = config.System.SwitchNetUsername;
             SwitchNetPassword = config.System.SwitchNetPassword;
             // LAN interface index is loaded asynchronously in PopulateNetworkInterfaces()
 
@@ -1023,7 +1023,7 @@ namespace Ryujinx.Ava.UI.ViewModels
             config.System.PrivateServerAddress.Value = PrivateServerAddress ?? string.Empty;
             config.System.PrivateServerNatCheckSecondaryAddress.Value = PrivateServerNatCheckSecondaryAddress ?? string.Empty;
             config.System.SwitchNetServer.Value = SwitchNetServer ?? string.Empty;
-            config.System.SwitchNetDeviceAccountId.Value = SwitchNetDeviceAccountId ?? string.Empty;
+            config.System.SwitchNetUsername.Value = SwitchNetUsername ?? string.Empty;
             config.System.SwitchNetPassword.Value = SwitchNetPassword ?? string.Empty;
 
             // Logging

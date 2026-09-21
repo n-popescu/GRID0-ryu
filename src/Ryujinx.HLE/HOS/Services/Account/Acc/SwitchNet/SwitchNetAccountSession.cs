@@ -80,20 +80,20 @@ namespace Ryujinx.HLE.HOS.Services.Account.Acc.SwitchNet
             }
 
             string server = configuration.SwitchNetServer?.Trim();
-            string account = configuration.SwitchNetDeviceAccountId?.Trim();
+            string username = configuration.SwitchNetUsername?.Trim();
             string password = configuration.SwitchNetPassword;
 
             bool hasServer = !string.IsNullOrEmpty(server);
-            bool hasAccount = !string.IsNullOrEmpty(account);
+            bool hasUsername = !string.IsNullOrEmpty(username);
             bool hasPassword = !string.IsNullOrEmpty(password);
 
-            if (!hasServer && !hasAccount && !hasPassword)
+            if (!hasServer && !hasUsername && !hasPassword)
             {
                 // All three empty is the deliberate off state -- nothing to warn about.
                 return false;
             }
 
-            if (!hasServer || !hasAccount || !hasPassword)
+            if (!hasServer || !hasUsername || !hasPassword)
             {
                 // One or two filled in is not a state anyone chooses on purpose: it is
                 // the state right before finishing the settings page, or a field that
@@ -102,7 +102,7 @@ namespace Ryujinx.HLE.HOS.Services.Account.Acc.SwitchNet
                 // the log -- which is exactly the question an operator staring at a
                 // game stuck "connecting" cannot otherwise answer.
                 string missing = (!hasServer ? "Server, " : "")
-                    + (!hasAccount ? "Device Account ID, " : "")
+                    + (!hasUsername ? "Username, " : "")
                     + (!hasPassword ? "Password, " : "");
                 missing = missing[..^2];
 
@@ -123,7 +123,7 @@ namespace Ryujinx.HLE.HOS.Services.Account.Acc.SwitchNet
             {
                 // The password is part of the signature so that correcting a typo takes
                 // effect, but it is never logged or otherwise rendered.
-                string signature = $"{endPoint}|{account}|{password.GetHashCode()}";
+                string signature = $"{endPoint}|{username}|{password.GetHashCode()}";
 
                 if (_client == null || _signature != signature)
                 {
@@ -131,7 +131,7 @@ namespace Ryujinx.HLE.HOS.Services.Account.Acc.SwitchNet
                     _client = new SwitchNetAccountClient(new SwitchNetAccountOptions
                     {
                         ServerEndPoint = endPoint,
-                        DeviceAccountId = account,
+                        Username = username,
                         Password = password,
                     });
                     _signature = signature;

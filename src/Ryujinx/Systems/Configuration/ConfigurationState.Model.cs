@@ -412,10 +412,10 @@ namespace Ryujinx.Ava.Systems.Configuration
             /// </summary>
             public ReactiveObject<string> SwitchNetServer { get; private set; }
 
-            /// <summary>The SwitchNet device account id to log in as.</summary>
-            public ReactiveObject<string> SwitchNetDeviceAccountId { get; private set; }
+            /// <summary>The username chosen at self-registration to log in as.</summary>
+            public ReactiveObject<string> SwitchNetUsername { get; private set; }
 
-            /// <summary>That device account's password.</summary>
+            /// <summary>That account's password.</summary>
             public ReactiveObject<string> SwitchNetPassword { get; private set; }
 
             /// <summary>
@@ -520,8 +520,8 @@ namespace Ryujinx.Ava.Systems.Configuration
                 PrivateServerNatCheckSecondaryAddress.LogChangesToValue(nameof(PrivateServerNatCheckSecondaryAddress));
                 SwitchNetServer = new ReactiveObject<string>();
                 SwitchNetServer.LogChangesToValue(nameof(SwitchNetServer));
-                SwitchNetDeviceAccountId = new ReactiveObject<string>();
-                SwitchNetDeviceAccountId.LogChangesToValue(nameof(SwitchNetDeviceAccountId));
+                SwitchNetUsername = new ReactiveObject<string>();
+                SwitchNetUsername.LogChangesToValue(nameof(SwitchNetUsername));
                 // Deliberately NOT logged: LogChangesToValue prints the new value.
                 SwitchNetPassword = new ReactiveObject<string>();
                 EnableFsIntegrityChecks = new ReactiveObject<bool>();
@@ -1046,7 +1046,7 @@ namespace Ryujinx.Ava.Systems.Configuration
                 System.PrivateServerAddress,
                 System.PrivateServerNatCheckSecondaryAddress,
                 System.SwitchNetServer,
-                System.SwitchNetDeviceAccountId,
+                System.SwitchNetUsername,
                 System.SwitchNetPassword,
                 System.EnableFsIntegrityChecks
                     ? IntegrityCheckLevel.ErrorOnInvalid
