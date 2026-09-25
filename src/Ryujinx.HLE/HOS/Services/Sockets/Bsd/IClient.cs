@@ -8,6 +8,7 @@ using System.Collections.Generic;
 using System.Net;
 using System.Net.Sockets;
 using System.Runtime.CompilerServices;
+using System.Runtime.InteropServices;
 using System.Text;
 
 namespace Ryujinx.HLE.HOS.Services.Sockets.Bsd
@@ -362,47 +363,43 @@ namespace Ryujinx.HLE.HOS.Services.Sockets.Bsd
                 return WriteBsdResult(context, -1, LinuxError.EINVAL);
             }
 
+            int entrySize = Unsafe.SizeOf<PollEventData>();
+
+            // A retry must read the pollfd array it was deferred with: the pointer buffer it arrived
+            // in lives in the server's shared receive area, and later requests have reused it since.
+            ReadOnlySpan<byte> retryInput = context.Retry?.Input;
+
             PollEvent[] events = new PollEvent[fdsCount];
+            bool hasEventFd = false;
+            bool hasClosedFd = false;
 
             for (int i = 0; i < fdsCount; i++)
             {
-                PollEventData pollEventData = context.Memory.Read<PollEventData>(inputBufferPosition + (ulong)(i * Unsafe.SizeOf<PollEventData>()));
+                PollEventData pollEventData = context.Retry != null
+                    ? MemoryMarshal.Read<PollEventData>(retryInput[(i * entrySize)..])
+                    : context.Memory.Read<PollEventData>(inputBufferPosition + (ulong)(i * entrySize));
 
                 IFileDescriptor fileDescriptor = _context.RetrieveFileDescriptor(pollEventData.SocketFd);
 
-                if (fileDescriptor == null)
-                {
-                    return WriteBsdResult(context, -1, LinuxError.EBADF);
-                }
+                hasEventFd |= fileDescriptor is EventFileDescriptor;
+                hasClosedFd |= fileDescriptor == null;
 
                 events[i] = new PollEvent(pollEventData, fileDescriptor);
             }
 
-            List<PollEvent> discoveredEvents = [];
-            List<PollEvent>[] eventsByPollManager = new List<PollEvent>[_pollManagers.Count];
-
-            for (int i = 0; i < eventsByPollManager.Length; i++)
+            if (hasEventFd)
             {
-                eventsByPollManager[i] = [];
-
-                foreach (PollEvent evnt in events)
-                {
-                    if (_pollManagers[i].IsCompatible(evnt))
-                    {
-                        eventsByPollManager[i].Add(evnt);
-                        discoveredEvents.Add(evnt);
-                    }
-                }
+                return PollWithWakeupFd(context, events, timeout, outputBufferPosition);
             }
 
-            foreach (PollEvent evnt in events)
+            if (hasClosedFd)
             {
-                if (!discoveredEvents.Contains(evnt))
-                {
-                    Logger.Error?.Print(LogClass.ServiceBsd, $"Poll operation is not supported for {evnt.FileDescriptor.GetType().Name}!");
+                return WriteBsdResult(context, -1, LinuxError.EBADF);
+            }
 
-                    return WriteBsdResult(context, -1, LinuxError.EBADF);
-                }
+            if (!TryGroupByPollManager(events, out List<PollEvent>[] eventsByPollManager))
+            {
+                return WriteBsdResult(context, -1, LinuxError.EBADF);
             }
 
             int updateCount = 0;
@@ -411,11 +408,6 @@ namespace Ryujinx.HLE.HOS.Services.Sockets.Bsd
 
             if (fdsCount != 0)
             {
-                static bool IsUnexpectedLinuxError(LinuxError error)
-                {
-                    return error is not LinuxError.SUCCESS and not LinuxError.ETIMEDOUT;
-                }
-
                 // Hybrid approach
                 long budgetLeftMilliseconds;
 
@@ -439,7 +431,7 @@ namespace Ryujinx.HLE.HOS.Services.Sockets.Bsd
 
                         errno = _pollManagers[i].Poll(eventsByPollManager[i], 0, out updateCount);
 
-                        if (IsUnexpectedLinuxError(errno))
+                        if (IsUnexpectedPollError(errno))
                         {
                             break;
                         }
@@ -471,11 +463,7 @@ namespace Ryujinx.HLE.HOS.Services.Sockets.Bsd
                 context.Device.System.KernelContext.Syscall.SleepThread(timeout);
             }
 
-            // TODO: Spanify
-            for (int i = 0; i < fdsCount; i++)
-            {
-                context.Memory.Write(outputBufferPosition + (ulong)(i * Unsafe.SizeOf<PollEventData>()), events[i].Data);
-            }
+            WritePollEvents(context, events, outputBufferPosition);
 
             // In case of non blocking call timeout should not be returned.
             if (timeout == 0 && errno == LinuxError.ETIMEDOUT)
@@ -484,6 +472,164 @@ namespace Ryujinx.HLE.HOS.Services.Sockets.Bsd
             }
 
             return WriteBsdResult(context, updateCount, errno);
+        }
+
+        private static bool IsUnexpectedPollError(LinuxError error)
+        {
+            return error is not LinuxError.SUCCESS and not LinuxError.ETIMEDOUT;
+        }
+
+        private static bool TryGroupByPollManager(PollEvent[] events, out List<PollEvent>[] eventsByPollManager)
+        {
+            eventsByPollManager = new List<PollEvent>[_pollManagers.Count];
+
+            for (int i = 0; i < eventsByPollManager.Length; i++)
+            {
+                eventsByPollManager[i] = [];
+            }
+
+            foreach (PollEvent evnt in events)
+            {
+                if (evnt.FileDescriptor == null)
+                {
+                    continue;
+                }
+
+                int manager = _pollManagers.FindIndex(pollManager => pollManager.IsCompatible(evnt));
+
+                if (manager < 0)
+                {
+                    Logger.Error?.Print(LogClass.ServiceBsd, $"Poll operation is not supported for {evnt.FileDescriptor.GetType().Name}!");
+
+                    return false;
+                }
+
+                eventsByPollManager[manager].Add(evnt);
+            }
+
+            return true;
+        }
+
+        private static void WritePollEvents(ServiceCtx context, PollEvent[] events, ulong outputBufferPosition)
+        {
+            // TODO: Spanify
+            for (int i = 0; i < events.Length; i++)
+            {
+                context.Memory.Write(outputBufferPosition + (ulong)(i * Unsafe.SizeOf<PollEventData>()), events[i].Data);
+            }
+        }
+
+        /// <summary>
+        /// poll() for a set that includes an eventfd -- in practice, a gRPC client's event loop,
+        /// which is what Splatoon 3's NPLN connection runs on.
+        /// </summary>
+        /// <remarks>
+        /// <para>
+        /// This never blocks the server thread. Such a poll is woken by a <c>Write</c> to its
+        /// eventfd, and that write is a request to this same single-threaded server: blocking here
+        /// would wait for a request that cannot be served until the wait ends. Instead it checks
+        /// once and, if nothing is ready, defers its reply (see <see cref="DeferredReply"/>); the
+        /// server re-runs it until something is.
+        /// </para>
+        /// <para>
+        /// It also follows POSIX where the path above does not, because gRPC depends on it: a
+        /// closed descriptor reports POLLNVAL for its own entry rather than failing the whole call
+        /// with EBADF (which made gRPC tear down and rebuild its channel over and over), every poll
+        /// manager is consulted rather than stopping at the first with a result (stopping at the
+        /// eventfd hid a socket's completed connect), and the count is of entries, not events.
+        /// Every other poll -- all NEX titles -- keeps the original behaviour, which they were built
+        /// and tested against.
+        /// </para>
+        /// </remarks>
+        private ResultCode PollWithWakeupFd(ServiceCtx context, PollEvent[] events, int timeout, ulong outputBufferPosition)
+        {
+            foreach (PollEvent evnt in events)
+            {
+                evnt.Data.OutputEvents = evnt.FileDescriptor == null ? PollEventTypeMask.Invalid : 0;
+            }
+
+            if (!TryGroupByPollManager(events, out List<PollEvent>[] eventsByPollManager))
+            {
+                return WriteBsdResult(context, -1, LinuxError.EBADF);
+            }
+
+            for (int i = 0; i < eventsByPollManager.Length; i++)
+            {
+                if (eventsByPollManager[i].Count == 0)
+                {
+                    continue;
+                }
+
+                LinuxError errno = _pollManagers[i].Poll(eventsByPollManager[i], 0, out _);
+
+                if (IsUnexpectedPollError(errno))
+                {
+                    return WriteBsdResult(context, -1, errno);
+                }
+            }
+
+            int readyCount = 0;
+
+            foreach (PollEvent evnt in events)
+            {
+                if (evnt.Data.OutputEvents != 0)
+                {
+                    readyCount++;
+                }
+            }
+
+            if (readyCount == 0 && timeout != 0 && context.Retry == null)
+            {
+                byte[] input = new byte[events.Length * Unsafe.SizeOf<PollEventData>()];
+
+                for (int i = 0; i < events.Length; i++)
+                {
+                    MemoryMarshal.Write(input.AsSpan(i * Unsafe.SizeOf<PollEventData>()), events[i].Data);
+                }
+
+                context.Defer(new DeferredReply
+                {
+                    DeadlineMs = timeout == -1 ? long.MaxValue : PerformanceCounter.ElapsedMilliseconds + timeout,
+                    Input = input,
+                });
+
+                return ResultCode.Success;
+            }
+
+            if (readyCount == 0 && context.Retry != null)
+            {
+                // Still waiting. If the deadline has passed this is the answer the server sends --
+                // poll() timing out returns 0, it is not an error -- and it is written without
+                // WriteBsdResult so a retry loop running every millisecond logs nothing.
+                context.ResponseData.Write(0);
+                context.ResponseData.Write((int)LinuxError.SUCCESS);
+
+                // The output area is only written when there is something to report: until the
+                // reply is sent it belongs to whichever request the server received last.
+                return ResultCode.Success;
+            }
+
+            if (context.Retry != null)
+            {
+                context.Retry.Ready = true;
+            }
+
+            // gRPC writes its wakeup eventfd but was never seen reading it back, so once readable it
+            // stayed readable: every poll returned at once on the wakeup alone and the loop never got
+            // as far as the socket beside it. Consuming the value here makes a wakeup fire once.
+            Span<byte> drain = stackalloc byte[sizeof(ulong)];
+
+            foreach (PollEvent evnt in events)
+            {
+                if (evnt.FileDescriptor is EventFileDescriptor eventFd && evnt.Data.OutputEvents.HasFlag(PollEventTypeMask.Input))
+                {
+                    eventFd.Read(out _, drain);
+                }
+            }
+
+            WritePollEvents(context, events, outputBufferPosition);
+
+            return WriteBsdResult(context, readyCount);
         }
 
         [CommandCmif(7)]

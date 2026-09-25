@@ -19,46 +19,37 @@ namespace Ryujinx.HLE.HOS.Services.Account.Acc.SwitchNet
     /// On real hardware the console's own account sysmodule does this: it presents a
     /// device certificate to dauth, exchanges the resulting device token for an
     /// anonymous BAAS token, and logs in with the device account id and password held
-    /// in its save data. An emulator has none of that, so Ryujinx fabricates an id
-    /// token locally -- correct in shape, signed with a throwaway key nothing can
-    /// verify. That is fine against a server that never checks, and useless against
-    /// one that does.
+    /// in its save data. An emulator has none of that -- no device certificate, no
+    /// save data with a device account already provisioned into it -- so Ryujinx
+    /// fabricates an id token locally by default: correct in shape, signed with a
+    /// throwaway key nothing can verify. That is fine against a server that never
+    /// checks, and useless against one that does.
     /// </para>
     /// <para>
-    /// This performs the same three calls a console makes, against the operator's own
-    /// server, and returns a token that server actually signed:
+    /// This logs in the way a person actually has a credential to log in: the
+    /// username and password they chose at self-registration on the server's own
+    /// <c>/register</c> page (see SwitchNet's <c>internal/baas/website.go</c>), the
+    /// same one a browser would submit. One request, <c>POST /login</c>, answered
+    /// by <c>internal/baas/accounts.go</c>'s <c>loginByUsername</c> -- not
+    /// <c>/1.0.0/login</c>, which is the real, Nintendo-shaped device-account
+    /// protocol and needs a device account this client has no way to already hold.
+    /// The server resolves (or, on first use, mints) a device account behind the
+    /// scenes; this client never sees or needs to know its id.
     /// </para>
-    /// <list type="number">
-    /// <item>POST dauth <c>/v6/device_auth_token</c> -- a device token. SwitchNet
-    /// accepts any device certificate by design, so there is nothing to present;
-    /// this is a deliberate decision on its side, not a gap on ours.</item>
-    /// <item>POST BAAS <c>/1.0.0/application/token</c> -- exchanges that for an
-    /// anonymous access token.</item>
-    /// <item>POST BAAS <c>/1.0.0/login</c> -- the device account id and password,
-    /// returning the id token.</item>
-    /// </list>
     /// <para>
-    /// No Nintendo credential is presented, verified or forged anywhere in this: every
+    /// No Nintendo credential is presented, verified or forged anywhere in this: the
     /// token involved is one the operator's own server signed with its own key.
     /// </para>
     /// </remarks>
     public sealed class SwitchNetAccountClient : IDisposable
     {
-        /// <summary>The hostname a console uses for dauth. A protocol fact, not a deployment one.</summary>
-        private const string DAuthHost = "dauth-lp1.ndas.srv.nintendo.net";
-
-        /// <summary>The hostname a console uses for BAAS.</summary>
-        private const string BaasHost = "e0d67c509fb203858ebcb2fe3f88c2aa.baas.nintendo.com";
-
         /// <summary>
-        /// The client id a console asks dauth for a token for.
+        /// The hostname a console uses for BAAS. <c>/login</c> is served on this same
+        /// host, not a Nintendo-shaped one of its own: SwitchNet's edge routes by SNI
+        /// and Host, so this is the hostname to present regardless of which path is
+        /// actually being asked for -- see this client's ConnectCallback.
         /// </summary>
-        /// <remarks>
-        /// SwitchNet does not check it -- it is echoed into the token's audience -- but
-        /// sending the value a console sends keeps a capture of this traffic
-        /// comparable with one taken from hardware.
-        /// </remarks>
-        private const string BaasClientId = "8f849b5d34778d8e";
+        private const string BaasHost = "e0d67c509fb203858ebcb2fe3f88c2aa.baas.nintendo.com";
 
         /// <summary>
         /// How long before a token actually expires it is treated as expired.
@@ -154,33 +145,14 @@ namespace Ryujinx.HLE.HOS.Services.Account.Acc.SwitchNet
             }
         }
 
-        /// <summary>Performs the full three-call login, ignoring any cached token.</summary>
+        /// <summary>Performs the login, ignoring any cached token.</summary>
         public async Task<LoginResult> LoginAsync(CancellationToken cancellationToken)
         {
-            string deviceToken = await PostFormAsync(
-                $"https://{DAuthHost}/v6/device_auth_token",
-                null,
-                new Dictionary<string, string> { ["client_id"] = BaasClientId },
-                "device_auth_token",
-                cancellationToken).ConfigureAwait(false);
-
-            string accessToken = await PostFormAsync(
-                $"https://{BaasHost}/1.0.0/application/token",
-                null,
-                new Dictionary<string, string>
-                {
-                    ["grantType"] = "public_client",
-                    ["assertion"] = deviceToken,
-                },
-                "accessToken",
-                cancellationToken).ConfigureAwait(false);
-
             using HttpResponseMessage response = await PostFormRawAsync(
-                $"https://{BaasHost}/1.0.0/login",
-                accessToken,
+                $"https://{BaasHost}/login",
                 new Dictionary<string, string>
                 {
-                    ["id"] = _options.DeviceAccountId,
+                    ["username"] = _options.Username,
                     ["password"] = _options.Password,
                 },
                 cancellationToken).ConfigureAwait(false);
@@ -189,10 +161,10 @@ namespace Ryujinx.HLE.HOS.Services.Account.Acc.SwitchNet
 
             if (!response.IsSuccessStatusCode)
             {
-                // BAAS answers a wrong device account or password with a specific
-                // errorCode, and that string is the whole diagnosis -- surfacing it
-                // is the difference between "login failed" and "you typed the
-                // password wrong".
+                // loginByUsername answers a plain {"error": "..."} body, not a BAAS
+                // errorCode -- see writePlainError's own reasoning on the server side.
+                // DescribeError already falls back to the raw body for anything that
+                // is not the BAAS shape, so it still says something useful here.
                 throw new SwitchNetLoginException(
                     $"login was refused ({(int)response.StatusCode}): {DescribeError(body)}");
             }
@@ -262,42 +234,8 @@ namespace Ryujinx.HLE.HOS.Services.Account.Acc.SwitchNet
             return DateTime.UtcNow + TimeSpan.FromMinutes(30);
         }
 
-        private async Task<string> PostFormAsync(
-            string url,
-            string bearer,
-            Dictionary<string, string> form,
-            string field,
-            CancellationToken cancellationToken)
-        {
-            using HttpResponseMessage response =
-                await PostFormRawAsync(url, bearer, form, cancellationToken).ConfigureAwait(false);
-
-            string body = await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
-
-            if (!response.IsSuccessStatusCode)
-            {
-                throw new SwitchNetLoginException(
-                    $"{new Uri(url).Host} answered {(int)response.StatusCode}: {DescribeError(body)}");
-            }
-
-            using JsonDocument document = JsonDocument.Parse(body);
-            if (!document.RootElement.TryGetProperty(field, out JsonElement element))
-            {
-                throw new SwitchNetLoginException($"{new Uri(url).Host} returned no '{field}'");
-            }
-
-            string value = element.GetString() ?? "";
-            if (string.IsNullOrEmpty(value))
-            {
-                throw new SwitchNetLoginException($"{new Uri(url).Host} returned an empty '{field}'");
-            }
-
-            return value;
-        }
-
         private async Task<HttpResponseMessage> PostFormRawAsync(
             string url,
-            string bearer,
             Dictionary<string, string> form,
             CancellationToken cancellationToken)
         {
@@ -305,10 +243,6 @@ namespace Ryujinx.HLE.HOS.Services.Account.Acc.SwitchNet
             {
                 Content = new FormUrlEncodedContent(form),
             };
-            if (bearer != null)
-            {
-                request.Headers.TryAddWithoutValidation("Authorization", "Bearer " + bearer);
-            }
 
             try
             {
@@ -330,7 +264,7 @@ namespace Ryujinx.HLE.HOS.Services.Account.Acc.SwitchNet
             }
         }
 
-        /// <summary>Pulls the errorCode out of a BAAS error body, or falls back to the body.</summary>
+        /// <summary>Pulls the error message out of a /login error body, or falls back to the body.</summary>
         private static string DescribeError(string body)
         {
             if (string.IsNullOrWhiteSpace(body))
@@ -341,6 +275,12 @@ namespace Ryujinx.HLE.HOS.Services.Account.Acc.SwitchNet
             try
             {
                 using JsonDocument document = JsonDocument.Parse(body);
+                // loginByUsername's own shape ({"error": "..."}) first; errorCode is
+                // checked too in case this ever talks to /1.0.0/login-shaped JSON.
+                if (document.RootElement.TryGetProperty("error", out JsonElement err))
+                {
+                    return err.GetString() ?? "(unnamed error)";
+                }
                 if (document.RootElement.TryGetProperty("errorCode", out JsonElement code))
                 {
                     return code.GetString() ?? "(unnamed error)";
@@ -366,7 +306,8 @@ namespace Ryujinx.HLE.HOS.Services.Account.Acc.SwitchNet
         /// <summary>Where the SwitchNet edge actually is. Every request is dialled here.</summary>
         public EndPoint ServerEndPoint { get; init; }
 
-        public string DeviceAccountId { get; init; }
+        /// <summary>The username chosen at self-registration on the server's own "/register" page.</summary>
+        public string Username { get; init; }
         public string Password { get; init; }
 
         public TimeSpan Timeout { get; init; } = TimeSpan.FromSeconds(15);

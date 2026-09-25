@@ -242,14 +242,14 @@
                 </StackPanel>
                 <StackPanel Margin="10,0,0,0" Orientation="Horizontal">
                     <TextBlock VerticalAlignment="Center"
-                        Text="{ext:Locale SettingsTabNetworkSwitchNetDeviceAccountId}"
-                        ToolTip.Tip="{ext:Locale SettingsTabNetworkSwitchNetDeviceAccountIdTooltip}"
+                        Text="{ext:Locale SettingsTabNetworkSwitchNetUsername}"
+                        ToolTip.Tip="{ext:Locale SettingsTabNetworkSwitchNetUsernameTooltip}"
                         Width="200" />
-                    <TextBox Name="SwitchNetDeviceAccountId"
-                        Text="{Binding SwitchNetDeviceAccountId}"
+                    <TextBox Name="SwitchNetUsername"
+                        Text="{Binding SwitchNetUsername}"
                         Width="250"
-                        ToolTip.Tip="{ext:Locale SettingsTabNetworkSwitchNetDeviceAccountIdTooltip}"
-                        PlaceholderText="{ext:Locale SettingsTabNetworkSwitchNetDeviceAccountIdWatermark}" />
+                        ToolTip.Tip="{ext:Locale SettingsTabNetworkSwitchNetUsernameTooltip}"
+                        PlaceholderText="{ext:Locale SettingsTabNetworkSwitchNetUsernameWatermark}" />
                 </StackPanel>
                 <StackPanel Margin="10,0,0,0" Orientation="Horizontal">
                     <TextBlock VerticalAlignment="Center"

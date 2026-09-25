@@ -80,7 +80,7 @@ namespace Ryujinx.HLE.Loaders.Processes.Extensions
             nsoExecutables = nsoExecutables.Where(x => x != null).ToArray();
 
             // Apply Nsos patches.
-            device.Configuration.VirtualFileSystem.ModLoader.ApplyNsoPatches(programId, nsoExecutables);
+            device.Configuration.VirtualFileSystem.ModLoader.ApplyNsoPatches(programId, device.Configuration.PrivateServerAddress, nsoExecutables);
 
             string programName = string.Empty;
 

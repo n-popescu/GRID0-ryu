@@ -2,6 +2,45 @@
 
 All updates to this Ryujinx branch will be documented in this file.
 
+## [1.4.0](<https://github.com/n-popescu/Ryubing-LanPlay/releases/tag/v1.4.0>) - 2026-09-25
+### Network:
+ - **Splatoon 3 no longer hangs on "connecting to the internet" entering the hall.** Its online client
+   runs on gRPC, whose event loop polls its sockets together with a wakeup eventfd and is woken by a
+   write to that eventfd. Both are requests to the same single-threaded `bsd:` service, and the poll
+   blocked it, so the wake-up could never be served.
+   - A poll that includes an eventfd now has its reply held back instead of blocking, and is re-run
+     until something is ready or its timeout passes. It also reports a closed descriptor as POLLNVAL
+     for that entry instead of failing the whole call. Every other poll, and so every NEX title, keeps
+     its previous behaviour.
+   - The IPC pointer buffer grows from 0x8000 to 0xF000, the most HIPC can express: gRPC's many open
+     streams overflowed it.
+ - **The SwitchNet Local CA is built in.** With **Private server address** set and no **Trusted CA
+   certificate** configured, the emulated `ssl:` service trusts SwitchNet's own CA, the one
+   switchnet-nro installs on a console. A configured bundle still takes precedence.
+ - **SwitchNet Account now logs in with a username and password**, the same credential chosen at
+   self-registration on the server's own `/register` page, instead of a server-generated device
+   account id and its own separate password.
+   - One request (`POST /login`) instead of the three-call device-auth chain (`dauth`, an anonymous
+     BAAS token, then `/1.0.0/login`) — that whole chain existed to authenticate a device account
+     this client never had a way to already hold. `/login` is SwitchNet's own endpoint for exactly
+     that gap; the server resolves, or on first use mints, a device account behind the scenes.
+   - Settings → Network → SwitchNet Account: the **Device Account ID** field is now **Username**.
+     Headless: `--switchnet-device-account-id` is now `--switchnet-username`.
+   - Configuration version 79. An existing configuration's device account id cannot be carried
+     forward as a username — they are different credentials for a different endpoint — so it resets
+     to empty, the same deliberate "login off" state a blank configuration already was.
+ - **Splatoon 3's own certificate pinning is now bypassed automatically**, in memory, whenever
+   **Private server address** is configured — no `atmosphere/exefs_patches` mod to install by hand.
+   - Splatoon 3 does the TLS for its NPLN connections itself, over a raw socket with its own
+     statically-linked BoringSSL, so `PrivateServerTrust` — which covers every *other* title, through
+     the guest OS's own `ssl:` service — never gets a chance to run for it. Without this, the
+     redirect and CA trust both work, and the game still sits on "connecting" forever.
+   - `PrivateServerSplatoon3Patches.cs` carries the same two IPS patches (certificate-pin bypass,
+     peer-hostname fix) `kinnay/NPLN-Protocols`' `generate_patch.py` produces, for the specific
+     Splatoon 3 builds already verified against real hardware. Keyed to the game's exact build id,
+     same as the disk-based version of this patch: a title update changes the executable and can
+     silently stop it matching — see `docs/switchnet.md`'s Splatoon 3 section.
+
 ## [1.3.35](<https://github.com/n-popescu/Ryubing-LanPlay/releases/tag/v1.3.35>) - 2026-08-29
 ### Network:
  - Added **SwitchNet Account** to *Settings → Network*, below Private Nintendo Servers, for logging

@@ -24,7 +24,9 @@ namespace Ryujinx.HLE.HOS.Services.Ssl.SslService
         public ResultCode CreateConnection(ServiceCtx context)
         {
             MakeObject(context, new ISslConnection(_processId, _sslVersion,
-                context.Device.Configuration.PrivateServerCaBundle));
+                PrivateServerTrust.Resolve(
+                    context.Device.Configuration.PrivateServerCaBundle,
+                    context.Device.Configuration.PrivateServerAddress)));
 
             _connectionCount++;
 

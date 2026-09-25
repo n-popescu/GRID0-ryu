@@ -15,6 +15,14 @@ namespace Ryujinx.HLE.HOS.Services.Sockets.Bsd.Impl
 
         public bool Blocking { get => !_flags.HasFlag(EventFdFlags.NonBlocking); set => throw new NotSupportedException(); }
 
+        /// <summary>
+        /// Raised after any eventfd becomes readable through a write. The bsd: server listens to
+        /// it to re-check a poll it deferred on that eventfd right away; see
+        /// <see cref="Services.DeferredReply"/>. Handlers run outside the lock and on the writer's
+        /// thread, so they must only signal.
+        /// </summary>
+        public static event Action Written;
+
         public ManualResetEvent WriteEvent { get; }
         public ManualResetEvent ReadEvent { get; }
 
@@ -147,8 +155,11 @@ namespace Ryujinx.HLE.HOS.Services.Sockets.Bsd.Impl
                 Monitor.Pulse(_lock);
 
                 UpdateEventStates();
-                return LinuxError.SUCCESS;
             }
+
+            Written?.Invoke();
+
+            return LinuxError.SUCCESS;
         }
     }
 }
