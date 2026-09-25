@@ -2,8 +2,21 @@
 
 All updates to this Ryujinx branch will be documented in this file.
 
-## [1.3.36](<https://github.com/n-popescu/Ryubing-LanPlay/releases/tag/v1.3.36>) - 2026-09-21
+## [1.4.0](<https://github.com/n-popescu/Ryubing-LanPlay/releases/tag/v1.4.0>) - 2026-09-25
 ### Network:
+ - **Splatoon 3 no longer hangs on "connecting to the internet" entering the hall.** Its online client
+   runs on gRPC, whose event loop polls its sockets together with a wakeup eventfd and is woken by a
+   write to that eventfd. Both are requests to the same single-threaded `bsd:` service, and the poll
+   blocked it, so the wake-up could never be served.
+   - A poll that includes an eventfd now has its reply held back instead of blocking, and is re-run
+     until something is ready or its timeout passes. It also reports a closed descriptor as POLLNVAL
+     for that entry instead of failing the whole call. Every other poll, and so every NEX title, keeps
+     its previous behaviour.
+   - The IPC pointer buffer grows from 0x8000 to 0xF000, the most HIPC can express: gRPC's many open
+     streams overflowed it.
+ - **The SwitchNet Local CA is built in.** With **Private server address** set and no **Trusted CA
+   certificate** configured, the emulated `ssl:` service trusts SwitchNet's own CA, the one
+   switchnet-nro installs on a console. A configured bundle still takes precedence.
  - **SwitchNet Account now logs in with a username and password**, the same credential chosen at
    self-registration on the server's own `/register` page, instead of a server-generated device
    account id and its own separate password.

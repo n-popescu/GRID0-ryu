@@ -51,8 +51,11 @@ need to think about credentials — everything after this reuses them.
 ### 2. Redirect the guest's traffic
 
 Follow [`private-servers.md`](private-servers.md): generate the hosts file with
-`switchnetctl hosts`, put it on the emulated SD card, tick **Redirect Nintendo's
-hostnames**, and point **Trusted CA certificate** at your CA.
+`switchnetctl hosts`, put it on the emulated SD card and tick **Redirect Nintendo's
+hostnames**. **Trusted CA certificate** can stay empty: the SwitchNet Local CA
+(the one switchnet-nro installs on a console) is built in and used whenever a
+private server is set. Point it at a file only if your server's certificate is
+signed by a different CA.
 
 ### 3. Fill in the login
 
