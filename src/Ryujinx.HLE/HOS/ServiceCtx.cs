@@ -18,6 +18,23 @@ namespace Ryujinx.HLE.HOS
         public BinaryWriter ResponseData { get; }
         public ulong ClientProcessId => Request.HandleDesc is { HasPId: true } ? Request.HandleDesc.PId : Process.Pid;
 
+        /// <summary>
+        /// Set when this call is the server re-running a request it earlier deferred, rather than
+        /// a fresh request. See <see cref="Services.DeferredReply"/>.
+        /// </summary>
+        public Services.DeferredReply Retry { get; init; }
+
+        /// <summary>
+        /// Set by a handler that wants its reply held back instead of sent now. See
+        /// <see cref="Services.DeferredReply"/>.
+        /// </summary>
+        public Services.DeferredReply DeferralRequest { get; private set; }
+
+        public void Defer(Services.DeferredReply reply)
+        {
+            DeferralRequest = reply;
+        }
+
         public ServiceCtx(
             Switch device,
             KProcess process,

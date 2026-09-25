@@ -23,7 +23,12 @@ namespace Ryujinx.HLE.HOS.Services
         // Must be the maximum value used by services (highest one know is the one used by nvservices = 0x8000).
         // Having a size that is too low will cause failures as data copy will fail if the receiving buffer is
         // not large enough.
-        private const int PointerBufferSize = 0x8000;
+        //
+        // Raised to 0xF000, the largest size the 16-bit HIPC receive-list size field can express:
+        // a gRPC client (Splatoon 3's NPLN) keeps many streams open at once, and its pointer
+        // buffers overflowed 0x8000, failing the game's SendSyncRequest with OutOfResource as it
+        // entered the hall. The 2 MiB server heap below holds it comfortably.
+        private const int PointerBufferSize = 0xF000;
 
         private static uint[] DefaultCapabilities => [
             (((uint)KScheduler.CpuCoresCount - 1) << 24) + (((uint)KScheduler.CpuCoresCount - 1) << 16) + 0x63F7u,
@@ -55,6 +60,12 @@ namespace Ryujinx.HLE.HOS.Services
 
         private int _isDisposed = 0;
 
+        // Requests whose reply is being held back. Only ever touched on the server thread. See
+        // DeferredReply for why these exist.
+        private readonly List<DeferredReply> _deferred = [];
+
+        private ulong _heapAddr;
+
         public ManualResetEvent InitDone { get; }
         public string Name { get; }
         public Func<IpcService> SmObjectFactory { get; }
@@ -72,6 +83,13 @@ namespace Ryujinx.HLE.HOS.Services
             InitDone = new ManualResetEvent(false);
             Name = name;
             SmObjectFactory = smObjectFactory;
+
+            // Only bsd: defers anything, and what un-defers it is an eventfd write. Waking the loop
+            // on one means a deferred poll is re-checked immediately rather than on the next tick.
+            if (name == "Bsd")
+            {
+                Sockets.Bsd.Impl.EventFileDescriptor.Written += Wake;
+            }
 
             const ProcessCreationFlags Flags =
                 ProcessCreationFlags.EnableAslr |
@@ -136,6 +154,11 @@ namespace Ryujinx.HLE.HOS.Services
             }
 
             _wakeEvent.WritableEvent.Signal();
+        }
+
+        private void Wake()
+        {
+            _wakeEvent?.WritableEvent.Signal();
         }
 
         private IpcService GetSessionObj(int serverSessionHandle)
@@ -203,12 +226,10 @@ namespace Ryujinx.HLE.HOS.Services
 
             InitDone.Set();
 
-            ulong messagePtr = _selfThread.TlsAddress;
             _context.Syscall.SetHeapSize(out ulong heapAddr, 0x200000);
+            _heapAddr = heapAddr;
 
-            _selfProcess.CpuMemory.Write(messagePtr + 0x0, 0);
-            _selfProcess.CpuMemory.Write(messagePtr + 0x4, 2 << 10);
-            _selfProcess.CpuMemory.Write(messagePtr + 0x8, heapAddr | ((ulong)PointerBufferSize << 48));
+            ArmReceiveList();
             int replyTargetHandle = 0;
 
             while (true)
@@ -242,7 +263,14 @@ namespace Ryujinx.HLE.HOS.Services
                     }
                 }
 
-                Result rc = _context.Syscall.ReplyAndReceive(out int signaledIndex, handles.AsSpan(0, handleCount), replyTargetHandle, -1);
+                // Nothing signals this loop when a HOST socket becomes readable, so while a reply is
+                // held back the loop has to poll. 1 ms, not something coarser: this tick is the
+                // round-trip clock of the whole guest gRPC transport while a poll is deferred, and a
+                // 50 ms tick capped it at ~20 exchanges a second -- the hall took minutes and then
+                // failed. With nothing deferred it stays -1, the original behaviour exactly.
+                long timeout = _deferred.Count != 0 ? 1_000_000 : -1;
+
+                Result rc = _context.Syscall.ReplyAndReceive(out int signaledIndex, handles.AsSpan(0, handleCount), replyTargetHandle, timeout);
 
                 _selfThread.HandlePostSyscall();
 
@@ -299,9 +327,12 @@ namespace Ryujinx.HLE.HOS.Services
                         DestroySession(handles[signaledIndex]);
                     }
 
-                    _selfProcess.CpuMemory.Write(messagePtr + 0x0, 0);
-                    _selfProcess.CpuMemory.Write(messagePtr + 0x4, 2 << 10);
-                    _selfProcess.CpuMemory.Write(messagePtr + 0x8, heapAddr | ((ulong)PointerBufferSize << 48));
+                    ArmReceiveList();
+                }
+
+                if (_deferred.Count != 0)
+                {
+                    RetryDeferred(ref replyTargetHandle);
                 }
 
                 ArrayPool<int>.Shared.Return(handles);
@@ -310,8 +341,116 @@ namespace Ryujinx.HLE.HOS.Services
             Dispose();
         }
 
+        // Tells the kernel where to put the pointer buffers of the next incoming request. Anything
+        // that writes a message into the TLS -- every reply -- overwrites it.
+        private void ArmReceiveList()
+        {
+            ulong messagePtr = _selfThread.TlsAddress;
+
+            _selfProcess.CpuMemory.Write(messagePtr + 0x0, 0);
+            _selfProcess.CpuMemory.Write(messagePtr + 0x4, 2 << 10);
+            _selfProcess.CpuMemory.Write(messagePtr + 0x8, _heapAddr | ((ulong)PointerBufferSize << 48));
+        }
+
+        /// <summary>
+        /// Re-runs every held-back request once, and replies to those that now have an answer or
+        /// have run out of time.
+        /// </summary>
+        private void RetryDeferred(ref int replyTargetHandle)
+        {
+            // Send the ordinary reply the top of the loop was about to send, first. Its pointer
+            // buffers are still sitting in the shared receive area -- which a retry writes its own
+            // output into -- and the kernel only copies them out when the reply is sent.
+            if (replyTargetHandle != 0)
+            {
+                _context.Syscall.ReplyAndReceive(out _, ReadOnlySpan<int>.Empty, replyTargetHandle, 0);
+                _selfThread.HandlePostSyscall();
+
+                replyTargetHandle = 0;
+
+                ArmReceiveList();
+            }
+
+            List<(DeferredReply Deferred, IpcMessage Response)> finished = null;
+
+            for (int i = _deferred.Count - 1; i >= 0; i--)
+            {
+                DeferredReply deferred = _deferred[i];
+
+                IpcMessage response = new() { Type = IpcMessageType.CmifResponse };
+
+                _requestDataStream.SetLength(0);
+                _requestDataStream.Write(deferred.Request.RawData);
+                _requestDataStream.Position = 0;
+
+                _responseDataStream.SetLength(0);
+
+                ServiceCtx context = new(
+                    _context.Device,
+                    _selfProcess,
+                    _selfProcess.CpuMemory,
+                    _selfThread,
+                    deferred.Request,
+                    response,
+                    _requestDataReader,
+                    _responseDataWriter)
+                {
+                    Retry = deferred,
+                };
+
+                GetSessionObj(deferred.SessionHandle).CallCmifMethod(context);
+
+                if (!deferred.Ready && PerformanceCounter.ElapsedMilliseconds < deferred.DeadlineMs)
+                {
+                    continue;
+                }
+
+                response.RawData = _responseDataStream.ToArray();
+
+                // The retry wrote its output into the receive-list slots Process() assigned the
+                // original request, but this response was built from nothing: without these
+                // descriptors the kernel copies none of it back, and the guest sees a positive
+                // poll() count with every revents still 0 -- so it re-polls immediately, forever.
+                for (int b = 0; b < deferred.Request.RecvListBuff.Count; b++)
+                {
+                    IpcRecvListBuffDesc buffer = deferred.Request.RecvListBuff[b];
+
+                    if (buffer.Position != 0 && buffer.Size != 0)
+                    {
+                        response.PtrBuff.Add(new IpcPtrBuffDesc(buffer.Position, (uint)b, buffer.Size));
+                    }
+                }
+
+                (finished ??= []).Add((deferred, response));
+
+                _deferred.RemoveAt(i);
+            }
+
+            if (finished == null)
+            {
+                return;
+            }
+
+            foreach ((DeferredReply deferred, IpcMessage response) in finished)
+            {
+                RecyclableMemoryStream responseStream = response.GetStream((long)_selfThread.TlsAddress, _heapAddr | ((ulong)PointerBufferSize << 48));
+                _selfProcess.CpuMemory.Write(_selfThread.TlsAddress, responseStream.GetReadOnlySequence());
+                MemoryStreamManager.Shared.ReleaseStream(responseStream);
+
+                // Reply only: no handles to wait on, zero timeout.
+                _context.Syscall.ReplyAndReceive(out _, ReadOnlySpan<int>.Empty, deferred.SessionHandle, 0);
+                _selfThread.HandlePostSyscall();
+            }
+
+            ArmReceiveList();
+        }
+
         private void DestroySession(int serverSessionHandle)
         {
+            // A client that closes its session while a reply is held back gets no reply, and must
+            // not be re-run against a session object that no longer exists.
+            _deferred.RemoveAll(deferred => deferred.SessionHandle == serverSessionHandle);
+
             _context.Syscall.CloseHandle(serverSessionHandle);
 
             if (RemoveSessionObj(serverSessionHandle, out IpcService session))
@@ -377,6 +516,21 @@ namespace Ryujinx.HLE.HOS.Services
                     _responseDataWriter);
 
                 GetSessionObj(serverSessionHandle).CallCmifMethod(context);
+
+                if (context.DeferralRequest is DeferredReply deferred)
+                {
+                    deferred.SessionHandle = serverSessionHandle;
+                    deferred.Request = request;
+
+                    _deferred.Add(deferred);
+
+                    // Not replying also means not writing a reply into the TLS -- and that write is
+                    // what normally re-arms the receive list. Without this the next request carrying
+                    // pointer buffers fails its copy with OutOfResource.
+                    ArmReceiveList();
+
+                    return false;
+                }
 
                 response.RawData = _responseDataStream.ToArray();
             }
