@@ -36,11 +36,11 @@ namespace Ryujinx.HLE.HOS
     /// written for precisely this purpose ("if you want to capture traffic or write your own
     /// NPLN servers"). It has to be run against the operator's own legitimately dumped copy of
     /// the game to produce bytes for the operator's own build -- this project has no such dump
-    /// to run it against. The byte patches below are instead taken from
-    /// <see href="https://github.com/NextendoNetwork/Ryujinx-Nextendo">NextendoNetwork/Ryujinx-Nextendo</see>
-    /// (MIT-licensed, so unlike this project's PolyForm-Shield-licensed server repos, its code
-    /// itself -- not just facts about its behaviour -- may be reused here), whose own commit
-    /// history records them as verified against real hardware for the three builds below.
+    /// to run it against. The offsets and instruction encodings below are instead facts recorded
+    /// by <see href="https://github.com/NextendoNetwork/Ryujinx-Nextendo">NextendoNetwork/Ryujinx-Nextendo</see>,
+    /// whose history records them as working for the three builds below. That fork's own code is
+    /// PolyForm Shield licensed, not MIT like upstream Ryujinx, so only those facts -- which
+    /// instruction, at which offset, becomes which -- are used here, never its code.
     /// </para>
     /// <para>
     /// <b>This is gated on Splatoon 3's exact build, not its version number or the emulator's
