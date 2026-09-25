@@ -57,6 +57,7 @@
     <EmbeddedResource Include="Debugger\Gdb\Xml\target32.xml" />
     <EmbeddedResource Include="Debugger\Gdb\Xml\target64.xml" />
     <EmbeddedResource Include="Homebrew.npdm" />
+    <EmbeddedResource Include="HOS\Services\Ssl\SslService\Resources\SwitchNetLocalCA.pem" />
     <EmbeddedResource Include="HOS\Applets\SoftwareKeyboard\Resources\Logo_Ryujinx.png" />
     <EmbeddedResource Include="HOS\Applets\SoftwareKeyboard\Resources\Icon_BtnA.png" />
     <EmbeddedResource Include="HOS\Applets\SoftwareKeyboard\Resources\Icon_BtnB.png" />

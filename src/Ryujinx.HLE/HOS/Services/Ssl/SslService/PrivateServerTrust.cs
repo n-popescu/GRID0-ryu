@@ -41,6 +41,33 @@ namespace Ryujinx.HLE.HOS.Services.Ssl.SslService
         private static X509Certificate2Collection _roots;
 
         /// <summary>
+        /// Stands in for a bundle path to mean the SwitchNet Local CA built into this emulator.
+        /// </summary>
+        /// <remarks>
+        /// It is the public certificate of the CA SwitchNet's <c>switchnetctl gen-certs</c> made
+        /// for this deployment -- the same one switchnet-nro installs on a console -- so a
+        /// SwitchNet user gets working TLS without finding and pointing at a file. It is only used
+        /// when a private server is configured and no bundle is (see <see cref="Resolve"/>), and
+        /// it adds trust in exactly that one CA: nothing chained to any other root is accepted
+        /// because of it.
+        /// </remarks>
+        public const string BuiltInSwitchNetCa = "builtin:switchnet-local-ca";
+
+        /// <summary>
+        /// The bundle to trust for a guest: the configured one, else the built-in SwitchNet CA
+        /// when a private server is configured, else none.
+        /// </summary>
+        public static string Resolve(string configuredBundle, string privateServerAddress)
+        {
+            if (!string.IsNullOrWhiteSpace(configuredBundle))
+            {
+                return configuredBundle;
+            }
+
+            return string.IsNullOrWhiteSpace(privateServerAddress) ? null : BuiltInSwitchNetCa;
+        }
+
+        /// <summary>
         /// Returns the configured roots, or null when there are none.
         /// </summary>
         public static X509Certificate2Collection GetRoots(string path)
@@ -66,6 +93,11 @@ namespace Ryujinx.HLE.HOS.Services.Ssl.SslService
 
         private static X509Certificate2Collection Load(string path)
         {
+            if (path == BuiltInSwitchNetCa)
+            {
+                return LoadBuiltIn();
+            }
+
             if (!File.Exists(path))
             {
                 // Warned once per path rather than thrown: a missing file means the guest falls
@@ -106,6 +138,31 @@ namespace Ryujinx.HLE.HOS.Services.Ssl.SslService
 
                 return null;
             }
+        }
+
+        private static X509Certificate2Collection LoadBuiltIn()
+        {
+            using Stream stream = typeof(PrivateServerTrust).Assembly.GetManifestResourceStream(
+                "Ryujinx.HLE.HOS.Services.Ssl.SslService.Resources.SwitchNetLocalCA.pem");
+
+            if (stream == null)
+            {
+                Logger.Warning?.Print(LogClass.ServiceSsl, "The built-in SwitchNet CA is missing from this build.");
+
+                return null;
+            }
+
+            using StreamReader reader = new(stream);
+
+            X509Certificate2Collection roots = new();
+            roots.ImportFromPem(reader.ReadToEnd());
+
+            foreach (X509Certificate2 root in roots)
+            {
+                Logger.Info?.Print(LogClass.ServiceSsl, $"Trusting built-in private server CA: {root.Subject}");
+            }
+
+            return roots;
         }
 
         /// <summary>
