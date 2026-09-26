@@ -12,6 +12,9 @@ All updates to this Ryujinx branch will be documented in this file.
      until something is ready or its timeout passes. It also reports a closed descriptor as POLLNVAL
      for that entry instead of failing the whole call. Every other poll, and so every NEX title, keeps
      its previous behaviour.
+   - A poll on an eventfd that requests no events is treated as a request for input. gRPC polls its
+     wakeup eventfd that way while connecting; it used to be refused with EINVAL, which made gRPC
+     drop the descriptor and loop.
    - The IPC pointer buffer grows from 0x8000 to 0xF000, the most HIPC can express: gRPC's many open
      streams overflowed it.
  - **The SwitchNet Local CA is built in.** With **Private server address** set and no **Trusted CA

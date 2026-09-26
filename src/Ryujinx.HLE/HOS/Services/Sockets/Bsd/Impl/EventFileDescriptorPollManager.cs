@@ -38,7 +38,7 @@ namespace Ryujinx.HLE.HOS.Services.Sockets.Bsd.Impl
 
                 bool isValidEvent = false;
 
-                if (evnt.Data.InputEvents.HasFlag(PollEventTypeMask.Input) ||
+                if (WantsInput(evnt) ||
                     evnt.Data.InputEvents.HasFlag(PollEventTypeMask.UrgentInput))
                 {
                     waiters.Add(socket.ReadEvent);
@@ -75,7 +75,7 @@ namespace Ryujinx.HLE.HOS.Services.Sockets.Bsd.Impl
 
                     if (socket.ReadEvent.WaitOne(0))
                     {
-                        if (evnt.Data.InputEvents.HasFlag(PollEventTypeMask.Input))
+                        if (WantsInput(evnt))
                         {
                             outputEvents |= PollEventTypeMask.Input;
                         }
@@ -106,6 +106,15 @@ namespace Ryujinx.HLE.HOS.Services.Sockets.Bsd.Impl
             }
 
             return LinuxError.SUCCESS;
+        }
+
+        // gRPC polls its wakeup eventfd with no events requested while an async connect is in
+        // flight, and expects that poll to return once the eventfd is written. Rejecting it with
+        // EINVAL made gRPC drop the descriptor and loop on EBADF, so Splatoon 3's online
+        // connection never came up. An empty request is therefore read as a request for input.
+        private static bool WantsInput(PollEvent evnt)
+        {
+            return evnt.Data.InputEvents == 0 || evnt.Data.InputEvents.HasFlag(PollEventTypeMask.Input);
         }
 
         public LinuxError Select(List<PollEvent> events, int timeout, out int updatedCount)
