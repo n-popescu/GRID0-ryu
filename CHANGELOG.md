@@ -2,6 +2,12 @@
 
 All updates to this Ryujinx branch will be documented in this file.
 
+## [1.4.3](<https://github.com/n-popescu/GRID0-ryu/releases/tag/v1.4.3>) - 2026-10-06
+### GRID0+:
+ - **Splatoon 3 no longer crashes at boot while a Splatfest is announced.** BCAT's
+   RequestSyncDeliveryCacheWithDirectoryName (10101) and CancelSyncDeliveryCacheRequest (10200)
+   are implemented.
+
 ## [1.4.2](<https://github.com/n-popescu/GRID0-ryu/releases/tag/v1.4.2>) - 2026-10-06
 ### GRID0+:
  - **BCAT from GRID0+.** A game's delivery cache, such as Splatoon 3's Splatfest packs, is fetched
