@@ -250,6 +250,21 @@ namespace Ryujinx.HLE.HOS.Services.Sockets.Sfdnsres.Proxy
 
         public IPHostEntry ResolveAddress(string host)
         {
+            // An IP literal has nothing to resolve and nothing to rename. Splatoon 3 gets the
+            // address of the server for a new session as an IP and passes it to getaddrinfo; a
+            // real lookup answered with the reverse-DNS name of that address instead of the
+            // one the guest asked for, and the gRPC connection to it never sent a request, so
+            // creating a private room failed with 2321-4992.
+            if (IPAddress.TryParse(host, out IPAddress literal))
+            {
+                return new IPHostEntry
+                {
+                    AddressList = [literal],
+                    HostName = host,
+                    Aliases = [],
+                };
+            }
+
             if (TryResolveRedirect(host, out IPHostEntry redirect))
             {
                 Logger.Info?.PrintMsg(LogClass.ServiceBsd,
