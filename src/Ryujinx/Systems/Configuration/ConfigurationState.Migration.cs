@@ -611,6 +611,29 @@ namespace Ryujinx.Ava.Systems.Configuration
                     // work and now cannot.
 
                     cff.SwitchNetUsername = string.Empty;
+                }),
+                (80, static cff =>
+                {
+                    // This build is GRID0+'s: it points at the GRID0+ server out of the box, so
+                    // an upgraded config needs only the login the Discord bot gives. Only empty
+                    // fields are filled; an address somebody typed in stays theirs.
+
+                    if (string.IsNullOrWhiteSpace(cff.PrivateServerAddress))
+                    {
+                        cff.PrivateServerAddress = Grid0Defaults.Address;
+                    }
+
+                    if (string.IsNullOrWhiteSpace(cff.PrivateServerNatCheckSecondaryAddress))
+                    {
+                        cff.PrivateServerNatCheckSecondaryAddress = Grid0Defaults.NatCheckSecondaryAddress;
+                    }
+
+                    if (string.IsNullOrWhiteSpace(cff.SwitchNetServer))
+                    {
+                        cff.SwitchNetServer = Grid0Defaults.Address;
+                    }
+
+                    cff.EnableInternetAccess = true;
                 })
             );
     }

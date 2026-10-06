@@ -157,7 +157,34 @@ namespace Ryujinx.HLE
         /// never completes; see <see cref="PrivateServerNatCheckSecondaryAddress"/>.
         /// </para>
         /// </remarks>
-        public string PrivateServerAddress { internal get; set; }
+        public string PrivateServerAddress
+        {
+            internal get
+            {
+                if (!string.IsNullOrWhiteSpace(_privateServerAddress))
+                {
+                    return _privateServerAddress.Trim();
+                }
+
+                // A config saved before the GRID0+ defaults existed holds an explicit empty
+                // address, which overrides them. With a GRID0+ login set, use that login's
+                // server: signing in there while the game itself goes to Nintendo fails with
+                // 2321-4992.
+                if (string.IsNullOrWhiteSpace(SwitchNetUsername) || string.IsNullOrWhiteSpace(SwitchNetServer))
+                {
+                    return _privateServerAddress;
+                }
+
+                string server = SwitchNetServer.Trim();
+                int colon = server.IndexOf(':');
+
+                // host:port names one host; more than one colon is a bare IPv6 address.
+                return colon > 0 && colon == server.LastIndexOf(':') ? server[..colon] : server;
+            }
+            set => _privateServerAddress = value;
+        }
+
+        private string _privateServerAddress;
 
         /// <summary>
         /// The address the <c>nncs2</c> NAT-check host resolves to, instead of
@@ -172,7 +199,22 @@ namespace Ryujinx.HLE
         /// too, which has that same failure mode -- so this is not a "nice to have" the way most
         /// address fields are.
         /// </remarks>
-        public string PrivateServerNatCheckSecondaryAddress { internal get; set; }
+        public string PrivateServerNatCheckSecondaryAddress
+        {
+            internal get
+            {
+                if (string.IsNullOrWhiteSpace(_privateServerNatCheckSecondaryAddress)
+                    && PrivateServerAddress == Grid0Defaults.Address)
+                {
+                    return Grid0Defaults.NatCheckSecondaryAddress;
+                }
+
+                return _privateServerNatCheckSecondaryAddress;
+            }
+            set => _privateServerNatCheckSecondaryAddress = value;
+        }
+
+        private string _privateServerNatCheckSecondaryAddress;
 
         /// <summary>
         /// Address of the SwitchNet server for the emulator's OWN account login:

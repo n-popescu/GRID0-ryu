@@ -222,12 +222,12 @@ namespace Ryujinx.Ava.Systems.Configuration
             Graphics.ScalingFilter.Value = ScalingFilter.Bilinear;
             Graphics.ScalingFilterLevel.Value = 80;
             System.EnablePtc.Value = true;
-            System.EnableInternetAccess.Value = false;
+            System.EnableInternetAccess.Value = true;
             System.RedirectNintendoServers.Value = false;
             System.PrivateServerCaBundle.Value = string.Empty;
-            System.PrivateServerAddress.Value = string.Empty;
-            System.PrivateServerNatCheckSecondaryAddress.Value = string.Empty;
-            System.SwitchNetServer.Value = string.Empty;
+            System.PrivateServerAddress.Value = Grid0Defaults.Address;
+            System.PrivateServerNatCheckSecondaryAddress.Value = Grid0Defaults.NatCheckSecondaryAddress;
+            System.SwitchNetServer.Value = Grid0Defaults.Address;
             System.SwitchNetUsername.Value = string.Empty;
             System.SwitchNetPassword.Value = string.Empty;
             System.EnableFsIntegrityChecks.Value = true;
