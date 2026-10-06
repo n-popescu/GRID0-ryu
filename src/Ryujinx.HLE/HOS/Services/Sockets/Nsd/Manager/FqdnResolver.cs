@@ -77,7 +77,16 @@ namespace Ryujinx.HLE.HOS.Services.Sockets.Nsd.Manager
 
             context.Memory.Read(inputPosition, addressBuffer);
 
-            string address = Encoding.UTF8.GetString(addressBuffer).TrimEnd('\0');
+            // The guest's FQDN buffer can hold bytes after the hostname's terminating NUL. TrimEnd
+            // only strips trailing NULs, so that residue stayed on the name and the lookup failed;
+            // cut at the first NUL, the way a C string is read.
+            string address = Encoding.UTF8.GetString(addressBuffer);
+            int nullIndex = address.IndexOf('\0');
+
+            if (nullIndex >= 0)
+            {
+                address = address[..nullIndex];
+            }
 
             resultCode = Resolve(address, out resolvedAddress);
 
