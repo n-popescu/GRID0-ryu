@@ -3,3 +3,6 @@
 ###############################################################################
 * text=auto eol=lf
 *.json text eol=lf
+
+# Binary IPS patches must never be line-ending-normalized.
+*.ips binary

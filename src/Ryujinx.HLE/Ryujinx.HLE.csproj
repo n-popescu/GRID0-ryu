@@ -50,6 +50,14 @@
   </ItemGroup>
 
   <ItemGroup>
+    <!-- GRID0+ private-server exefs IPS patches, shipped from the grid0plus-toolbox
+         repo so the emulator applies them to the game in memory, with no SD-card
+         exefs_patches directory. Keyed by the target build id in the file name; see
+         PrivateServerSplatoon3Patches. -->
+    <EmbeddedResource Include="HOS\Patches\exefs_patches\**\*.ips" />
+  </ItemGroup>
+
+  <ItemGroup>
     <EmbeddedResource Include="Debugger\Gdb\Xml\aarch64-core.xml" />
     <EmbeddedResource Include="Debugger\Gdb\Xml\aarch64-fpu.xml" />
     <EmbeddedResource Include="Debugger\Gdb\Xml\arm-core.xml" />

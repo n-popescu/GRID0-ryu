@@ -1,7 +1,8 @@
 using Ryujinx.Common.Logging;
 using Ryujinx.HLE.Loaders.Mods;
-using System.Collections.Generic;
+using System;
 using System.IO;
+using System.Reflection;
 
 namespace Ryujinx.HLE.HOS
 {
@@ -19,109 +20,84 @@ namespace Ryujinx.HLE.HOS
     /// does: its own compiled-in TLS stack checks the certificate itself, so the guest-OS-level
     /// trust callback is never consulted for its NPLN connections, and the TLS handshake never
     /// completes -- the game just sits on "connecting" forever. This is documented at length,
-    /// against real hardware, in switchnet's own <c>switch/README.md</c> ("Part 3: Splatoon 3
-    /// pins its own certificates"), which is where the two patches below come from.
+    /// against real hardware, in GRID0+'s own <c>switch/README.md</c> ("Part 3: Splatoon 3
+    /// pins its own certificates"), which is where these patches come from.
     /// </para>
     /// <para>
-    /// Two independent fixes, both required:
-    /// </para>
-    /// <list type="number">
-    /// <item>the certificate-pinning check itself, forced to always pass;</item>
-    /// <item>the peer hostname comparison the game makes afterward, which otherwise still
-    /// refuses a certificate whose SAN does not literally read a real Nintendo hostname.</item>
-    /// </list>
-    /// <para>
-    /// The canonical source for this exact technique is <c>generate_patch.py</c> in
-    /// <see href="https://github.com/kinnay/NPLN-Protocols">kinnay/NPLN-Protocols</see>,
-    /// written for precisely this purpose ("if you want to capture traffic or write your own
-    /// NPLN servers"). It has to be run against the operator's own legitimately dumped copy of
-    /// the game to produce bytes for the operator's own build -- this project has no such dump
-    /// to run it against. The offsets and instruction encodings below are instead facts recorded
-    /// by <see href="https://github.com/NextendoNetwork/Ryujinx-Nextendo">NextendoNetwork/Ryujinx-Nextendo</see>,
-    /// whose history records them as working for the three builds below. That fork's own code is
-    /// PolyForm Shield licensed, not MIT like upstream Ryujinx, so only those facts -- which
-    /// instruction, at which offset, becomes which -- are used here, never its code.
+    /// The patch bytes are the real <c>.ips</c> files shipped in the
+    /// <see href="https://github.com/n-popescu/grid0plus-toolbox">grid0plus-toolbox</see>
+    /// repository under <c>romfs/sd/atmosphere/exefs_patches/</c> -- the exact files a real
+    /// console applies through Atmosphère. They are embedded in this assembly (see the
+    /// <c>HOS\Patches\exefs_patches\**\*.ips</c> item in <c>Ryujinx.HLE.csproj</c>) and applied
+    /// here in memory, so the emulator needs no SD-card <c>exefs_patches</c> directory. Only the
+    /// Splatoon 3 game patches travel with the emulator: the toolbox's <c>bcat</c>, system
+    /// <c>ssl:</c> and browser patches target modules this emulator high-level-emulates rather
+    /// than running as a guest NSO, so they could never match a loaded build id and are left to
+    /// the console toolbox. The <c>.ips</c> bytes carry no Nintendo code and neither create nor
+    /// impersonate a Nintendo signature.
     /// </para>
     /// <para>
     /// <b>This is gated on Splatoon 3's exact build, not its version number or the emulator's
-    /// firmware.</b> A title update changes the game's own binary and silently stops these
-    /// patches matching -- the same failure mode <c>switch/README.md</c> warns about for the
-    /// disk-based version of this patch. A build not listed in
-    /// <see cref="_patchesByBuildId"/> gets nothing, exactly as an unmatched <c>exefs_patches</c>
-    /// file would: if Splatoon 3 stops connecting after an update, regenerating this table from
-    /// a fresh dump via <c>generate_patch.py</c> is the first thing to try, per that file's own
-    /// "the last thing to change" guidance.
+    /// firmware</b>, by the build id in each <c>.ips</c> file name (trailing zeros trimmed, the
+    /// same shape <see cref="ModLoader"/> computes for every loaded NSO). A title update changes
+    /// the game's own binary and silently stops these patches matching -- the same failure mode
+    /// <c>switch/README.md</c> warns about for the disk-based version of this patch. A build
+    /// with no matching file gets nothing, exactly as an unmatched <c>exefs_patches</c> file
+    /// would: if Splatoon 3 stops connecting after an update, adding the new build's patches to
+    /// the toolbox (and re-syncing them here) is the first thing to try.
     /// </para>
     /// </remarks>
     internal static class PrivateServerSplatoon3Patches
     {
         public const ulong Splatoon3ApplicationId = 0x0100C2500FC20000;
 
-        // Forces the pinned-certificate check to pass unconditionally. 4 bytes at 0x00157B20:
-        // LDRB W10,[X21,#0x38] (AA E2 40 39) -> MOV W10,#1 (2A 00 80 52).
-        private static readonly byte[] _certificatePinningBypass =
-        [
-            0x49, 0x50, 0x53, 0x33, 0x32,             // "IPS32"
-            0x00, 0x15, 0x7B, 0x20, 0x00, 0x04,       // offset 0x00157B20, 4 bytes
-            0x2A, 0x00, 0x80, 0x52,
-            0x45, 0x45, 0x4F, 0x46,                   // "EEOF"
-        ];
+        // Manifest-name marker for the embedded toolbox patch tree. Each resource is named
+        // ...Patches.exefs_patches.<category>.<buildId>.ips, so a patch for a build is found by
+        // the "<buildId>.ips" suffix regardless of how MSBuild mangled the leading path.
+        private const string PatchResourceMarker = ".Patches.exefs_patches.";
 
-        // Fixes the peer-hostname comparison the game makes right after. Two records:
-        // CBZ W0,+88 (C0 02 00 34) -> NOP (1F 20 03 D5) at 0x0014E1B0, and
-        // MOV W20,W0 (F4 03 00 2A) -> MOV W20,WZR (F4 03 1F 2A) at 0x0014DD80.
-        private static readonly byte[] _peerHostnameFix =
-        [
-            0x49, 0x50, 0x53, 0x33, 0x32,             // "IPS32"
-            0x00, 0x14, 0xE1, 0xB0, 0x00, 0x04,       // offset 0x0014E1B0, 4 bytes
-            0x1F, 0x20, 0x03, 0xD5,
-            0x00, 0x14, 0xDD, 0x80, 0x00, 0x04,       // offset 0x0014DD80, 4 bytes
-            0xF4, 0x03, 0x1F, 0x2A,
-            0x45, 0x45, 0x4F, 0x46,                   // "EEOF"
-        ];
+        private static readonly Assembly _assembly = typeof(PrivateServerSplatoon3Patches).Assembly;
 
         /// <summary>
-        /// Splatoon 3 build id (uppercase hex, trailing zeros trimmed -- the same shape
-        /// <see cref="ModLoader"/> already computes every build id in) to the patches that
-        /// build needs.
-        /// </summary>
-        private static readonly Dictionary<string, byte[][]> _patchesByBuildId = new()
-        {
-            ["6830B3A12406CB4716FEC5ADDC35D3E2DC92D212"] = [_certificatePinningBypass, _peerHostnameFix],
-
-            // 11.3.0. Both sites are at the SAME offsets as 11.2.0 above -- the binary's growth
-            // by 4096 bytes falls after both -- so the same bytes apply unchanged.
-            ["28C4287AEE36F7499DA60F3E68B54C70DA382D75"] = [_certificatePinningBypass, _peerHostnameFix],
-
-            // A third, older build Ryujinx-Nextendo's history covers with only the
-            // certificate-pinning bypass -- the peer-hostname fix was not yet known needed
-            // for it, or its offsets were not yet found. Recorded as-is rather than guessed at.
-            ["726D2B882DD9EF10F4A9D73EED088740630FB6C8"] = [_certificatePinningBypass],
-        };
-
-        /// <summary>
-        /// Adds the patches known for <paramref name="buildId"/> to <paramref name="target"/>.
-        /// Returns how many were added (0 for an unrecognised build).
+        /// Adds every embedded patch whose file name matches <paramref name="buildId"/> to
+        /// <paramref name="target"/>. Returns how many were added (0 for an unrecognised build).
         /// </summary>
         public static int Apply(string buildId, MemPatch target)
         {
-            if (string.IsNullOrEmpty(buildId) || !_patchesByBuildId.TryGetValue(buildId, out byte[][] patches))
+            if (string.IsNullOrEmpty(buildId))
             {
                 return 0;
             }
 
-            foreach (byte[] bytes in patches)
-            {
-                using MemoryStream stream = new(bytes);
-                using BinaryReader reader = new(stream);
+            string suffix = "." + buildId + ".ips";
+            int applied = 0;
 
+            foreach (string name in _assembly.GetManifestResourceNames())
+            {
+                if (!name.Contains(PatchResourceMarker, StringComparison.Ordinal) ||
+                    !name.EndsWith(suffix, StringComparison.OrdinalIgnoreCase))
+                {
+                    continue;
+                }
+
+                using Stream stream = _assembly.GetManifestResourceStream(name);
+                if (stream == null)
+                {
+                    continue;
+                }
+
+                using BinaryReader reader = new(stream);
                 new IpsPatcher(reader).AddPatches(target);
+                applied++;
             }
 
-            Logger.Info?.Print(LogClass.ModLoader,
-                $"Splatoon 3: applied {patches.Length} embedded private-server patch(es) for build {buildId}");
+            if (applied > 0)
+            {
+                Logger.Info?.Print(LogClass.ModLoader,
+                    $"Splatoon 3: applied {applied} embedded private-server patch(es) for build {buildId}");
+            }
 
-            return patches.Length;
+            return applied;
         }
     }
 }
