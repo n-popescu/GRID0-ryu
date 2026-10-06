@@ -17,6 +17,8 @@ using Ryujinx.Ava.Common.Locale;
 using Ryujinx.Ava.Input;
 using Ryujinx.Ava.Systems.AppLibrary;
 using Ryujinx.Ava.Systems.Configuration;
+using Ryujinx.Ava.Systems.Grid0;
+using Ryujinx.HLE.HOS.Services.Account.Acc.SwitchNet;
 using Ryujinx.Ava.UI.Helpers;
 using Ryujinx.Ava.UI.Models;
 using Ryujinx.Ava.UI.Renderer;
@@ -473,6 +475,9 @@ namespace Ryujinx.Ava.Systems
 
             DisplaySleep.Prevent();
 
+            // Friends on GRID0+ see what this player is playing, as a console's friend list shows.
+            Grid0Friends.SetPresence(Grid0Account.Client, ApplicationId);
+
             if (ConfigurationState.Instance.System.UseInputGlobalConfig.Value && Program.UseExtraConfig)
             {
                 NpadManager.Initialize(Device, ConfigurationState.InstanceExtra.Hid.InputConfig, ConfigurationState.InstanceExtra.Hid.PlayerInputAssignments, ConfigurationState.Instance.Hid.EnableKeyboard, ConfigurationState.Instance.Hid.EnableMouse);
@@ -654,6 +659,8 @@ namespace Ryujinx.Ava.Systems
 
         private void Exit()
         {
+            Grid0Friends.SetPresence(Grid0Account.Client, 0);
+
             (_keyboardInterface as AvaloniaKeyboard)?.Clear();
 
             if (_isStopped)

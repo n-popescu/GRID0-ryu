@@ -154,23 +154,30 @@
                         Width="250" />
                 </StackPanel>
                 <Separator Height="1" />
+                <!-- One group, as citron's GRID0+ build has it: where the game's traffic goes,
+                     the CA that signs the server, and the login the emulator itself uses. Every
+                     field defaults to the GRID0+ server, so only the login needs filling in. -->
                 <TextBlock Classes="h1" Text="{ext:Locale SettingsTabNetworkPrivateServers}" />
-                <TextBlock Margin="10,0,0,0"
-                    FontStyle="Italic"
-                    MaxWidth="600"
-                    TextWrapping="Wrap"
-                    Focusable="False"
-                    Text="{ext:Locale SettingsTabNetworkPrivateServersAbout}" />
-                <CheckBox Margin="10,0,0,0"
-                    IsEnabled="{Binding EnableInternetAccess}"
-                    IsChecked="{Binding RedirectNintendoServers}">
-                    <TextBlock Text="{ext:Locale SettingsTabNetworkRedirectNintendoServers}"
-                        ToolTip.Tip="{ext:Locale SettingsTabNetworkRedirectNintendoServersTooltip}" />
-                </CheckBox>
-                <!-- Not gated on RedirectNintendoServers: trust and redirection are
-                     independent in code (PrivateServerTrust reads only this path), and
-                     the address fields below are a second, independent way to redirect
-                     that does not go through this checkbox at all. -->
+                <StackPanel Margin="10,0,0,0" Orientation="Horizontal">
+                    <TextBlock VerticalAlignment="Center"
+                        Text="{ext:Locale SettingsTabNetworkPrivateServerAddress}"
+                        ToolTip.Tip="{ext:Locale SettingsTabNetworkPrivateServerAddressTooltip}"
+                        Width="200" />
+                    <TextBox Name="PrivateServerAddress"
+                        Text="{Binding PrivateServerAddress}"
+                        Width="250"
+                        ToolTip.Tip="{ext:Locale SettingsTabNetworkPrivateServerAddressTooltip}" />
+                </StackPanel>
+                <StackPanel Margin="10,0,0,0" Orientation="Horizontal">
+                    <TextBlock VerticalAlignment="Center"
+                        Text="{ext:Locale SettingsTabNetworkPrivateServerNatCheckSecondaryAddress}"
+                        ToolTip.Tip="{ext:Locale SettingsTabNetworkPrivateServerNatCheckSecondaryAddressTooltip}"
+                        Width="200" />
+                    <TextBox Name="PrivateServerNatCheckSecondaryAddress"
+                        Text="{Binding PrivateServerNatCheckSecondaryAddress}"
+                        Width="250"
+                        ToolTip.Tip="{ext:Locale SettingsTabNetworkPrivateServerNatCheckSecondaryAddressTooltip}" />
+                </StackPanel>
                 <StackPanel Margin="10,0,0,0" Orientation="Horizontal">
                     <TextBlock VerticalAlignment="Center"
                         Text="{ext:Locale SettingsTabNetworkPrivateServerCa}"
@@ -190,45 +197,6 @@
                             Text="{ext:Locale SettingsTabNetworkPrivateServerCaBrowse}" />
                     </Button>
                 </StackPanel>
-
-                <TextBlock Margin="10,6,0,0"
-                    FontStyle="Italic"
-                    MaxWidth="600"
-                    TextWrapping="Wrap"
-                    Focusable="False"
-                    Text="{ext:Locale SettingsTabNetworkPrivateServerAddressAbout}" />
-                <StackPanel Margin="10,0,0,0" Orientation="Horizontal">
-                    <TextBlock VerticalAlignment="Center"
-                        Text="{ext:Locale SettingsTabNetworkPrivateServerAddress}"
-                        ToolTip.Tip="{ext:Locale SettingsTabNetworkPrivateServerAddressTooltip}"
-                        Width="200" />
-                    <TextBox Name="PrivateServerAddress"
-                        Text="{Binding PrivateServerAddress}"
-                        Width="250"
-                        ToolTip.Tip="{ext:Locale SettingsTabNetworkPrivateServerAddressTooltip}"
-                        PlaceholderText="{ext:Locale SettingsTabNetworkPrivateServerAddressWatermark}" />
-                </StackPanel>
-                <StackPanel Margin="10,0,0,0" Orientation="Horizontal">
-                    <TextBlock VerticalAlignment="Center"
-                        Text="{ext:Locale SettingsTabNetworkPrivateServerNatCheckSecondaryAddress}"
-                        ToolTip.Tip="{ext:Locale SettingsTabNetworkPrivateServerNatCheckSecondaryAddressTooltip}"
-                        Width="200" />
-                    <TextBox Name="PrivateServerNatCheckSecondaryAddress"
-                        Text="{Binding PrivateServerNatCheckSecondaryAddress}"
-                        Width="250"
-                        ToolTip.Tip="{ext:Locale SettingsTabNetworkPrivateServerNatCheckSecondaryAddressTooltip}"
-                        PlaceholderText="{ext:Locale SettingsTabNetworkPrivateServerNatCheckSecondaryAddressWatermark}" />
-                </StackPanel>
-
-                <!-- The emulator's OWN login to the private server, as opposed to the
-                     guest traffic the two settings above redirect and trust. Separate
-                     because a private server that does not check identity needs those
-                     and not this. -->
-                <TextBlock Margin="10,6,0,0" Classes="h1"
-                    Text="{ext:Locale SettingsTabNetworkSwitchNetAccount}" />
-                <TextBlock Margin="10,0,0,0" FontStyle="Italic" MaxWidth="640"
-                    TextWrapping="Wrap" Focusable="False"
-                    Text="{ext:Locale SettingsTabNetworkSwitchNetAccountHint}" />
                 <StackPanel Margin="10,0,0,0" Orientation="Horizontal">
                     <TextBlock VerticalAlignment="Center"
                         Text="{ext:Locale SettingsTabNetworkSwitchNetServer}"
@@ -237,8 +205,7 @@
                     <TextBox Name="SwitchNetServer"
                         Text="{Binding SwitchNetServer}"
                         Width="250"
-                        ToolTip.Tip="{ext:Locale SettingsTabNetworkSwitchNetServerTooltip}"
-                        PlaceholderText="{ext:Locale SettingsTabNetworkSwitchNetServerWatermark}" />
+                        ToolTip.Tip="{ext:Locale SettingsTabNetworkSwitchNetServerTooltip}" />
                 </StackPanel>
                 <StackPanel Margin="10,0,0,0" Orientation="Horizontal">
                     <TextBlock VerticalAlignment="Center"
@@ -248,8 +215,7 @@
                     <TextBox Name="SwitchNetUsername"
                         Text="{Binding SwitchNetUsername}"
                         Width="250"
-                        ToolTip.Tip="{ext:Locale SettingsTabNetworkSwitchNetUsernameTooltip}"
-                        PlaceholderText="{ext:Locale SettingsTabNetworkSwitchNetUsernameWatermark}" />
+                        ToolTip.Tip="{ext:Locale SettingsTabNetworkSwitchNetUsernameTooltip}" />
                 </StackPanel>
                 <StackPanel Margin="10,0,0,0" Orientation="Horizontal">
                     <TextBlock VerticalAlignment="Center"

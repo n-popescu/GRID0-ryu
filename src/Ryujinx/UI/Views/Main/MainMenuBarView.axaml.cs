@@ -39,6 +39,8 @@ namespace Ryujinx.Ava.UI.Views.Main
             MiiEditorMenuItem.Command = Commands.Create(OpenMiiEditor);
             CloseRyujinxMenuItem.Command = Commands.Create(() => Window?.Close());
             OpenSettingsMenuItem.Command = Commands.Create(OpenSettings);
+            Grid0FriendsMenuItem.Command = Commands.Create(Grid0FriendsWindow.ShowOrRaise);
+            Grid0AccountMenuItem.Command = Commands.Create(() => OpenSettings("NetworkPage"));
             PauseEmulationMenuItem.Command = Commands.Create(() => ViewModel.AppHost?.Pause());
             ResumeEmulationMenuItem.Command = Commands.Create(() => ViewModel.AppHost?.Resume());
             StopEmulationMenuItem.Command = Commands.Create(() => ViewModel.AppHost?.ShowExitPrompt().OrCompleted());
@@ -117,9 +119,17 @@ namespace Ryujinx.Ava.UI.Views.Main
             }
         }
 
-        public async Task OpenSettings()
+        public Task OpenSettings() => OpenSettings(null);
+
+        /// <param name="page">The settings page to open on, by its tag; null for the first.</param>
+        public async Task OpenSettings(string page)
         {
             Window.SettingsWindow = new(Window.VirtualFileSystem, Window.ContentManager);
+
+            if (page != null)
+            {
+                Window.SettingsWindow.SelectPage(page);
+            }
 
             Rainbow.Enable();
 

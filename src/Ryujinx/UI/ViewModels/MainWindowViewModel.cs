@@ -2041,6 +2041,8 @@ namespace Ryujinx.Ava.UI.ViewModels
             });
         }
 
+        public void OpenGrid0Friends() => Grid0FriendsWindow.ShowOrRaise();
+
         public async Task OpenAmiiboWindow()
         {
             if (AppHost.Device.System.SearchingForAmiibo(out int deviceId) && IsGameRunning)

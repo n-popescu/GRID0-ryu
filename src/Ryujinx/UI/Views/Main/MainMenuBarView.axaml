@@ -210,6 +210,17 @@
                     <MenuItem Name="XCITrimmerMenuItem" Header="{ext:Locale MenuBar_Actions_XCITrimmerButton}" Icon="{ext:Icon fa-solid fa-scissors}" />
                 </MenuItem>
             </MenuItem>
+            <MenuItem VerticalAlignment="Center" Header="{ext:Locale MenuBar_Grid0Label}">
+                <MenuItem
+                    Name="Grid0FriendsMenuItem"
+                    Header="{ext:Locale MenuBar_Grid0_FriendsButton}"
+                    InputGesture="Ctrl+Shift+F"
+                    Icon="{ext:Icon fa-solid fa-user-group}" />
+                <MenuItem
+                    Name="Grid0AccountMenuItem"
+                    Header="{ext:Locale MenuBar_Grid0_AccountButton}"
+                    Icon="{ext:Icon fa-solid fa-server}" />
+            </MenuItem>
             <MenuItem VerticalAlignment="Center" Header="{ext:Locale MenuBarView}">
                 <MenuItem
                     Command="{Binding ToggleShowConsole}"

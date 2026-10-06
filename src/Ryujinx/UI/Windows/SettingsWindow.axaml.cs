@@ -62,6 +62,17 @@ namespace Ryujinx.Ava.UI.Windows
             NavPanel.SelectedItem = NavPanel.MenuItems.ElementAt(0);
         }
 
+        /// <summary>Opens on the page with this tag, e.g. "NetworkPage".</summary>
+        public void SelectPage(string tag)
+        {
+            object item = NavPanel.MenuItems.FirstOrDefault(i => i is FANavigationViewItem { Tag: { } t } && t.ToString() == tag);
+
+            if (item != null)
+            {
+                NavPanel.SelectedItem = item;
+            }
+        }
+
         private void NavPanelOnSelectionChanged(object sender, FANavigationViewSelectionChangedEventArgs e)
         {
             if (e.SelectedItem is FANavigationViewItem navItem && navItem.Tag is not null)
