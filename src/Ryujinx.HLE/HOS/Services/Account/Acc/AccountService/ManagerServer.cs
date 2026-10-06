@@ -96,6 +96,15 @@ namespace Ryujinx.HLE.HOS.Services.Account.Acc.AccountService
             //       as "%08x-%04x-%04x-%02x%02x-%08x%04x") in the account:/ savedata.
             //       Then it searches the NetworkServiceAccountId related to the UserId in this file and returns it.
 
+            // Signed in to GRID0+, the game's NPLN server names this user, and owns every
+            // friend relationship it sends, by the account's id: the id token's subject.
+            if (SwitchNetAccountSession.TryGetNetworkServiceAccountId(context.Device.Configuration, out ulong switchNetId))
+            {
+                context.ResponseData.Write(switchNetId);
+
+                return ResultCode.Success;
+            }
+
             Logger.Stub?.PrintStub(LogClass.ServiceAcc, new { NetworkServiceAccountId });
 
             context.ResponseData.Write(NetworkServiceAccountId);

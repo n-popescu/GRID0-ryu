@@ -16,7 +16,7 @@ namespace Ryujinx.HLE.HOS.Services.Account.Acc.SwitchNet
     /// for it, and a game that opens several account sessions would otherwise log in
     /// several times over for the same answer.
     /// </remarks>
-    static class SwitchNetAccountSession
+    public static class SwitchNetAccountSession
     {
         /// <summary>The port a SwitchNet edge is reached on when the address names none.</summary>
         private const int DefaultPort = 443;
@@ -79,9 +79,18 @@ namespace Ryujinx.HLE.HOS.Services.Account.Acc.SwitchNet
                 return false;
             }
 
-            string server = configuration.SwitchNetServer?.Trim();
-            string username = configuration.SwitchNetUsername?.Trim();
-            string password = configuration.SwitchNetPassword;
+            return TryGetClient(configuration.SwitchNetServer, configuration.SwitchNetUsername, configuration.SwitchNetPassword, out client);
+        }
+
+        /// <summary>
+        /// The same, from the settings themselves: the GRID0+ Friends window has no running
+        /// game, and so no <see cref="HleConfiguration"/>, to read them from.
+        /// </summary>
+        public static bool TryGetClient(string server, string username, string password, out SwitchNetAccountClient client)
+        {
+            client = null;
+            server = server?.Trim();
+            username = username?.Trim();
 
             bool hasServer = !string.IsNullOrEmpty(server);
             bool hasUsername = !string.IsNullOrEmpty(username);
@@ -196,6 +205,39 @@ namespace Ryujinx.HLE.HOS.Services.Account.Acc.SwitchNet
                 ReportSuccess();
 
                 return true;
+            }
+            catch (SwitchNetLoginException e)
+            {
+                WarnOnce(e.Message);
+            }
+            catch (OperationCanceledException)
+            {
+                WarnOnce($"login did not finish within {_blockingWait.TotalSeconds:0}s");
+            }
+
+            return false;
+        }
+
+        /// <summary>
+        /// The signed-in account's network service account id, or false when there is none.
+        /// </summary>
+        public static bool TryGetNetworkServiceAccountId(HleConfiguration configuration, out ulong id)
+        {
+            id = 0;
+
+            if (!TryGetClient(configuration, out SwitchNetAccountClient client))
+            {
+                return false;
+            }
+
+            try
+            {
+                using CancellationTokenSource cts = new(_blockingWait);
+
+                ulong? result = client.GetNetworkServiceAccountIdAsync(cts.Token).GetAwaiter().GetResult();
+                id = result ?? 0;
+
+                return result.HasValue;
             }
             catch (SwitchNetLoginException e)
             {

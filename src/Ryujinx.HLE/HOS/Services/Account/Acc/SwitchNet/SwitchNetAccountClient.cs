@@ -2,8 +2,10 @@ using System;
 using System.Collections.Generic;
 using System.Net;
 using System.Net.Http;
+using System.Net.Http.Headers;
 using System.Net.Security;
 using System.Net.Sockets;
+using System.Text;
 using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
@@ -67,6 +69,8 @@ namespace Ryujinx.HLE.HOS.Services.Account.Acc.SwitchNet
 
         private string _idToken;
         private DateTime _idTokenExpiry;
+        private string _accessToken;
+        private string _userId;
 
         public SwitchNetAccountClient(SwitchNetAccountOptions options)
         {
@@ -127,15 +131,7 @@ namespace Ryujinx.HLE.HOS.Services.Account.Acc.SwitchNet
             await _lock.WaitAsync(cancellationToken).ConfigureAwait(false);
             try
             {
-                if (_idToken != null && DateTime.UtcNow + _expiryMargin < _idTokenExpiry)
-                {
-                    return _idToken;
-                }
-
-                LoginResult result = await LoginAsync(cancellationToken).ConfigureAwait(false);
-
-                _idToken = result.IdToken;
-                _idTokenExpiry = result.ExpiresAt;
+                await EnsureLoggedInAsync(cancellationToken).ConfigureAwait(false);
 
                 return _idToken;
             }
@@ -143,6 +139,106 @@ namespace Ryujinx.HLE.HOS.Services.Account.Acc.SwitchNet
             {
                 _lock.Release();
             }
+        }
+
+        /// <summary>
+        /// The signed-in user's network service account id: the id token's subject, which is
+        /// how the server's NPLN names this user and every friend relationship.
+        /// </summary>
+        public async Task<ulong?> GetNetworkServiceAccountIdAsync(CancellationToken cancellationToken)
+        {
+            await _lock.WaitAsync(cancellationToken).ConfigureAwait(false);
+            try
+            {
+                await EnsureLoggedInAsync(cancellationToken).ConfigureAwait(false);
+
+                return ulong.TryParse(_userId, System.Globalization.NumberStyles.HexNumber, null, out ulong id) && id != 0
+                    ? id
+                    : null;
+            }
+            finally
+            {
+                _lock.Release();
+            }
+        }
+
+        /// <summary>
+        /// A request to the server's emulator API (<c>/emulator/v1/...</c>) on the BAAS host,
+        /// with the access token from the same login. Returns the status and body.
+        /// </summary>
+        public async Task<(int Status, string Body)> SendAsync(
+            HttpMethod method, string path, string jsonBody, CancellationToken cancellationToken)
+        {
+            string accessToken;
+
+            await _lock.WaitAsync(cancellationToken).ConfigureAwait(false);
+            try
+            {
+                await EnsureLoggedInAsync(cancellationToken).ConfigureAwait(false);
+                accessToken = _accessToken;
+            }
+            finally
+            {
+                _lock.Release();
+            }
+
+            if (string.IsNullOrEmpty(accessToken))
+            {
+                throw new SwitchNetLoginException("the login response carried no accessToken");
+            }
+
+            using HttpRequestMessage request = new(method, $"https://{BaasHost}{path}");
+            request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", accessToken);
+
+            if (jsonBody != null)
+            {
+                request.Content = new StringContent(jsonBody, Encoding.UTF8, "application/json");
+            }
+
+            try
+            {
+                using HttpResponseMessage response = await _http.SendAsync(request, cancellationToken).ConfigureAwait(false);
+
+                return ((int)response.StatusCode, await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false));
+            }
+            catch (HttpRequestException e)
+            {
+                throw new SwitchNetLoginException($"could not reach {BaasHost} at {_options.ServerEndPoint}: {e.Message}", e);
+            }
+        }
+
+        /// <summary>
+        /// GETs an https URL on a Nintendo host the server answers for, such as a profile
+        /// picture. Every connection this client makes is dialled at the server.
+        /// </summary>
+        public async Task<byte[]> FetchAsync(string url, CancellationToken cancellationToken)
+        {
+            if (!Uri.TryCreate(url, UriKind.Absolute, out Uri uri) || uri.Scheme != Uri.UriSchemeHttps)
+            {
+                return null;
+            }
+
+            using HttpResponseMessage response = await _http.GetAsync(uri, cancellationToken).ConfigureAwait(false);
+
+            return response.IsSuccessStatusCode
+                ? await response.Content.ReadAsByteArrayAsync(cancellationToken).ConfigureAwait(false)
+                : null;
+        }
+
+        /// <summary>Logs in unless the cached tokens are still good. Call with the lock held.</summary>
+        private async Task EnsureLoggedInAsync(CancellationToken cancellationToken)
+        {
+            if (_idToken != null && DateTime.UtcNow + _expiryMargin < _idTokenExpiry)
+            {
+                return;
+            }
+
+            LoginResult result = await LoginAsync(cancellationToken).ConfigureAwait(false);
+
+            _idToken = result.IdToken;
+            _idTokenExpiry = result.ExpiresAt;
+            _accessToken = result.AccessToken;
+            _userId = result.UserId;
         }
 
         /// <summary>Performs the login, ignoring any cached token.</summary>
@@ -183,6 +279,10 @@ namespace Ryujinx.HLE.HOS.Services.Account.Acc.SwitchNet
                 throw new SwitchNetLoginException("the login response carried an empty idToken");
             }
 
+            string accessToken = root.TryGetProperty("accessToken", out JsonElement accessTokenElement)
+                ? accessTokenElement.GetString()
+                : null;
+
             string userId = "";
             string nickname = "";
             if (root.TryGetProperty("user", out JsonElement user))
@@ -197,7 +297,7 @@ namespace Ryujinx.HLE.HOS.Services.Account.Acc.SwitchNet
             // pointlessly or handing the game a token that has already expired.
             DateTime expiresAt = ReadExpiry(idToken);
 
-            return new LoginResult(idToken, userId, nickname, expiresAt);
+            return new LoginResult(idToken, accessToken, userId, nickname, expiresAt);
         }
 
         /// <summary>Reads the 'exp' claim without verifying the signature.</summary>
@@ -313,7 +413,7 @@ namespace Ryujinx.HLE.HOS.Services.Account.Acc.SwitchNet
         public TimeSpan Timeout { get; init; } = TimeSpan.FromSeconds(15);
     }
 
-    public sealed record LoginResult(string IdToken, string UserId, string Nickname, DateTime ExpiresAt);
+    public sealed record LoginResult(string IdToken, string AccessToken, string UserId, string Nickname, DateTime ExpiresAt);
 
     /// <summary>A login that failed for a reason worth telling the operator.</summary>
     public sealed class SwitchNetLoginException : Exception
