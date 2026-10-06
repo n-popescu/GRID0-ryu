@@ -1,6 +1,7 @@
 using Ryujinx.Common.Logging;
 using Ryujinx.HLE.Loaders.Mods;
 using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Reflection;
 
@@ -59,6 +60,32 @@ namespace Ryujinx.HLE.HOS
         private static readonly Assembly _assembly = typeof(PrivateServerSplatoon3Patches).Assembly;
 
         /// <summary>
+        /// Older Splatoon 3 builds the toolbox ships no <c>.ips</c> files for, mapped to the build
+        /// whose files carry the same bytes and the categories of those files that apply.
+        /// </summary>
+        /// <remarks>
+        /// These two builds were covered before the toolbox files were embedded, by the same bytes
+        /// as 11.3.0's <c>s3grpcverify_bypass</c> (the pinned-certificate check, 0x00157B20) and
+        /// <c>s3grpcpeer_bypass</c> (the peer-hostname comparison, 0x0014E1B0 and 0x0014DD80):
+        /// 11.3.0's binary only grew after both sites, so 11.2.0 shares them unchanged. The
+        /// toolbox's two newer categories (<c>s3certpin_bypass</c>, <c>s3verifyoption_bypass</c>)
+        /// sit elsewhere in the binary and have never been confirmed for these builds, so they are
+        /// not applied to them. The oldest build was only ever recorded with the certificate
+        /// bypass -- its peer-hostname offsets were never established -- and stays that way rather
+        /// than being guessed at.
+        /// </remarks>
+        private static readonly Dictionary<string, (string PatchBuildId, string[] Categories)> _sharedSites = new()
+        {
+            // 11.2.0
+            ["6830B3A12406CB4716FEC5ADDC35D3E2DC92D212"] =
+                ("28C4287AEE36F7499DA60F3E68B54C70DA382D75", ["s3grpcverify_bypass", "s3grpcpeer_bypass"]),
+
+            // An older build, certificate-pinning check only.
+            ["726D2B882DD9EF10F4A9D73EED088740630FB6C8"] =
+                ("28C4287AEE36F7499DA60F3E68B54C70DA382D75", ["s3grpcverify_bypass"]),
+        };
+
+        /// <summary>
         /// Adds every embedded patch whose file name matches <paramref name="buildId"/> to
         /// <paramref name="target"/>. Returns how many were added (0 for an unrecognised build).
         /// </summary>
@@ -69,13 +96,27 @@ namespace Ryujinx.HLE.HOS
                 return 0;
             }
 
-            string suffix = "." + buildId + ".ips";
+            string[] onlyCategories = null;
+            string patchBuildId = buildId;
+
+            if (_sharedSites.TryGetValue(buildId, out var shared))
+            {
+                patchBuildId = shared.PatchBuildId;
+                onlyCategories = shared.Categories;
+            }
+
+            string suffix = "." + patchBuildId + ".ips";
             int applied = 0;
 
             foreach (string name in _assembly.GetManifestResourceNames())
             {
                 if (!name.Contains(PatchResourceMarker, StringComparison.Ordinal) ||
                     !name.EndsWith(suffix, StringComparison.OrdinalIgnoreCase))
+                {
+                    continue;
+                }
+
+                if (onlyCategories != null && !IsInCategories(name, onlyCategories))
                 {
                     continue;
                 }
@@ -98,6 +139,24 @@ namespace Ryujinx.HLE.HOS
             }
 
             return applied;
+        }
+
+        /// <summary>
+        /// Whether a manifest resource name sits in one of the given patch categories. The name
+        /// reads <c>...exefs_patches.&lt;category&gt;.&lt;buildId&gt;.ips</c>, so a category is
+        /// matched with both of its dots, never as a bare substring of another category.
+        /// </summary>
+        private static bool IsInCategories(string resourceName, string[] categories)
+        {
+            foreach (string category in categories)
+            {
+                if (resourceName.Contains(".exefs_patches." + category + ".", StringComparison.Ordinal))
+                {
+                    return true;
+                }
+            }
+
+            return false;
         }
     }
 }
