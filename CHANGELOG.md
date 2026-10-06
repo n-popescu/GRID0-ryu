@@ -2,6 +2,24 @@
 
 All updates to this Ryujinx branch will be documented in this file.
 
+## [1.4.1](<https://github.com/n-popescu/GRID0-ryu/releases/tag/v1.4.1>) - 2026-10-06
+### GRID0+:
+ - **Works out of the box.** The private-server settings default to the GRID0+ server, so only the
+   login the GRID0+ Discord bot gives is needed; no environment variables. An upgraded configuration
+   gets the defaults in its empty fields.
+ - **GRID0+ menu**, as in citron's GRID0+ build: Friends (Ctrl+Shift+F) shows your friend code, your
+   friends and what each is playing, and friend requests, and adds a friend by code; Account and server
+   opens the network settings.
+ - **Network settings** are one GRID0+ group: server, NAT check address, CA, login server, login and
+   password.
+ - **Friends in games.** The friend service answers with your GRID0+ friends and sends your presence,
+   so Splatoon 3's friend list shows them and they can see and join you. Games get your GRID0+
+   account id.
+### Network:
+ - Creating a Splatoon 3 private room no longer fails with 2321-4992: a lookup of an IP address is
+   answered with that address.
+ - A hostname read from the guest is cut at its first NUL.
+
 ## [1.4.0](<https://github.com/n-popescu/Ryubing-LanPlay/releases/tag/v1.4.0>) - 2026-09-25
 ### Network:
  - **Splatoon 3 no longer hangs on "connecting to the internet" entering the hall.** Its online client
