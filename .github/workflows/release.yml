@@ -104,6 +104,22 @@ jobs:
           path: ~/.nuget/packages
           key: nuget-${{ runner.os }}-${{ hashFiles('**/global.json', '**/*.csproj', '**/Directory.Packages.props') }}
 
+      - name: LibHac feed fallback
+        # Ryujinx.LibHac pre-releases only exist on git.ryujinx.app, and NuGet hangs rather than
+        # failing when that feed is down. The package is mirrored on this repository's build-deps
+        # release (BSD-3-Clause); use it whenever the feed does not answer.
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if curl -sf -m 20 -o /dev/null https://git.ryujinx.app/api/packages/projects/nuget/index.json; then
+            echo "git.ryujinx.app reachable, using it"; exit 0
+          fi
+          echo "::warning::git.ryujinx.app unreachable, using the LibHac package mirrored on the build-deps release"
+          mkdir -p "$RUNNER_TEMP/libhac"
+          gh release download build-deps -R "$GITHUB_REPOSITORY" -p "ryujinx.libhac.*.nupkg" -D "$RUNNER_TEMP/libhac"
+          dotnet nuget update source LibHacAlpha --source "$RUNNER_TEMP/libhac" --configfile nuget.config
+
       - name: Build the solution
         run: dotnet build Ryujinx.sln -c Release
 
@@ -137,6 +153,22 @@ jobs:
         with:
           path: ~/.nuget/packages
           key: nuget-${{ runner.os }}-${{ hashFiles('**/global.json', '**/*.csproj', '**/Directory.Packages.props') }}
+
+      - name: LibHac feed fallback
+        # Ryujinx.LibHac pre-releases only exist on git.ryujinx.app, and NuGet hangs rather than
+        # failing when that feed is down. The package is mirrored on this repository's build-deps
+        # release (BSD-3-Clause); use it whenever the feed does not answer.
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if curl -sf -m 20 -o /dev/null https://git.ryujinx.app/api/packages/projects/nuget/index.json; then
+            echo "git.ryujinx.app reachable, using it"; exit 0
+          fi
+          echo "::warning::git.ryujinx.app unreachable, using the LibHac package mirrored on the build-deps release"
+          mkdir -p "$RUNNER_TEMP/libhac"
+          gh release download build-deps -R "$GITHUB_REPOSITORY" -p "ryujinx.libhac.*.nupkg" -D "$RUNNER_TEMP/libhac"
+          dotnet nuget update source LibHacAlpha --source "$RUNNER_TEMP/libhac" --configfile nuget.config
 
       - name: Stamp the version into ReleaseInformation.cs
         run: |
@@ -242,6 +274,22 @@ jobs:
         with:
           path: ~/.nuget/packages
           key: nuget-${{ runner.os }}-${{ hashFiles('**/global.json', '**/*.csproj', '**/Directory.Packages.props') }}
+
+      - name: LibHac feed fallback
+        # Ryujinx.LibHac pre-releases only exist on git.ryujinx.app, and NuGet hangs rather than
+        # failing when that feed is down. The package is mirrored on this repository's build-deps
+        # release (BSD-3-Clause); use it whenever the feed does not answer.
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if curl -sf -m 20 -o /dev/null https://git.ryujinx.app/api/packages/projects/nuget/index.json; then
+            echo "git.ryujinx.app reachable, using it"; exit 0
+          fi
+          echo "::warning::git.ryujinx.app unreachable, using the LibHac package mirrored on the build-deps release"
+          mkdir -p "$RUNNER_TEMP/libhac"
+          gh release download build-deps -R "$GITHUB_REPOSITORY" -p "ryujinx.libhac.*.nupkg" -D "$RUNNER_TEMP/libhac"
+          dotnet nuget update source LibHacAlpha --source "$RUNNER_TEMP/libhac" --configfile nuget.config
 
       - name: Stamp the version into ReleaseInformation.cs
         # macOS ships BSD sed, whose -i takes the backup suffix as a separate argument.
