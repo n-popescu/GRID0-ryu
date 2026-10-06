@@ -273,6 +273,9 @@ namespace Ryujinx.HLE.HOS
         {
             HorizonFsClient fsClient = new(this);
 
+            // The friend service answers with GRID0+'s friend list when signed in there.
+            Ryujinx.Horizon.Sdk.Friends.FriendsSource.Current = new Services.Account.Acc.SwitchNet.Grid0FriendsSource(Device);
+
             ServiceTable = new ServiceTable();
             IEnumerable<ServiceEntry> services = ServiceTable.GetServices(new HorizonOptions
                 (Device.Configuration.IgnoreMissingServices,

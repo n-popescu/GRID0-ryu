@@ -18,7 +18,8 @@ namespace Ryujinx.HLE.HOS.Services.Account.Acc.SwitchNet
         string State,
         string AppId,
         string ImageUrl,
-        bool IsFavorite);
+        bool IsFavorite,
+        byte[] AppField);
 
     public sealed record Grid0FriendRequest(string Id, Grid0Friend Other);
 
@@ -104,13 +105,42 @@ namespace Ryujinx.HLE.HOS.Services.Account.Acc.SwitchNet
         /// Asked for the client on every send, so a login changed in the settings meanwhile is
         /// the one used. Returns null when GRID0+ is not configured.
         /// </param>
-        public static void SetPresence(Func<SwitchNetAccountClient> clientSource, ulong titleId)
+        public static void SetPresence(Func<SwitchNetAccountClient> clientSource, ulong titleId) =>
+            SetPresence(clientSource, titleId, titleId != 0 ? 2u : 1u, null, gameSet: false);
+
+        /// <summary>
+        /// The presence a game set through the friend service: its nn::friends status (0
+        /// offline, 1 online, 2 online play) and its app key-value storage, which is what lets a
+        /// friend join this player.
+        /// </summary>
+        public static void SetGamePresence(Func<SwitchNetAccountClient> clientSource, ulong titleId, uint status, byte[] appField) =>
+            SetPresence(clientSource, titleId, status, appField, gameSet: true);
+
+        private static bool _gameSetPresence;
+
+        private static void SetPresence(Func<SwitchNetAccountClient> clientSource, ulong titleId, uint status, byte[] appField, bool gameSet)
         {
+            // A game that sets its own presence keeps it until it stops; the generic "playing"
+            // from the game starting must not overwrite it.
+            if (!gameSet && titleId != 0 && _gameSetPresence)
+            {
+                return;
+            }
+
+            _gameSetPresence = gameSet && titleId != 0;
+
+            // Trailing zeroes are the unused part of the fixed-size storage, not data.
+            int length = appField?.Length ?? 0;
+            while (length > 0 && appField[length - 1] == 0)
+            {
+                length--;
+            }
+
             string body = JsonSerializer.Serialize(new Dictionary<string, string>
             {
-                ["state"] = titleId != 0 ? "PLAYING" : "ONLINE",
+                ["state"] = status switch { 2 => "PLAYING", 1 => "ONLINE", _ => "OFFLINE" },
                 ["appId"] = titleId != 0 ? titleId.ToString("x16") : "",
-                ["appField"] = "",
+                ["appField"] = length > 0 ? Convert.ToBase64String(appField, 0, length) : "",
             });
 
             lock (_presenceLock)
@@ -224,7 +254,29 @@ namespace Ryujinx.HLE.HOS.Services.Account.Acc.SwitchNet
                 Str("state"),
                 Str("appId"),
                 Str("imageUrl"),
-                favorite);
+                favorite,
+                DecodeAppField(Str("appField")));
+        }
+
+        /// <summary>The game's presence blob, as the friend reported it; base64, either alphabet.</summary>
+        private static byte[] DecodeAppField(string field)
+        {
+            if (string.IsNullOrEmpty(field))
+            {
+                return [];
+            }
+
+            string b64 = field.Replace('-', '+').Replace('_', '/');
+            b64 = b64.PadRight(b64.Length + (4 - b64.Length % 4) % 4, '=');
+
+            try
+            {
+                return Convert.FromBase64String(b64);
+            }
+            catch (FormatException)
+            {
+                return [];
+            }
         }
 
         private static async Task<JsonDocument> GetJsonAsync(SwitchNetAccountClient client, string path, CancellationToken ct)

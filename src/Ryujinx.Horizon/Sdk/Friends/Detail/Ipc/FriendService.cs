@@ -1,4 +1,5 @@
 using Ryujinx.Common.Logging;
+using Ryujinx.Common.Memory;
 using Ryujinx.Horizon.Common;
 using Ryujinx.Horizon.Sdk.Account;
 using Ryujinx.Horizon.Sdk.OsTypes;
@@ -6,6 +7,7 @@ using Ryujinx.Horizon.Sdk.Settings;
 using Ryujinx.Horizon.Sdk.Sf;
 using Ryujinx.Horizon.Sdk.Sf.Hipc;
 using System;
+using System.Collections.Generic;
 using System.Runtime.InteropServices;
 using System.Text;
 
@@ -52,12 +54,21 @@ namespace Ryujinx.Horizon.Sdk.Friends.Detail.Ipc
         {
             count = 0;
 
-            Logger.Stub?.PrintStub(LogClass.ServiceFriend, new { userId, offset, filter, pidPlaceholder, pid });
-
             if (userId.IsNull)
             {
                 return FriendResult.InvalidArgument;
             }
+
+            // A game asks once, early (Splatoon 3 at boot), and keeps what it got for the whole
+            // session; a short, bounded wait for the first fetch beats an empty list forever.
+            IReadOnlyList<FriendsSourceEntry> friends = FriendsSource.Current?.GetFriends(TimeSpan.FromSeconds(2)) ?? [];
+
+            for (int i = Math.Max(offset, 0); i < friends.Count && count < friendIds.Length; i++, count++)
+            {
+                friendIds[count] = new NetworkServiceAccountId(friends[i].NetworkServiceAccountId);
+            }
+
+            Logger.Info?.Print(LogClass.ServiceFriend, $"GetFriendListIds offset={offset} -> {count}");
 
             return Result.Success;
         }
@@ -74,12 +85,21 @@ namespace Ryujinx.Horizon.Sdk.Friends.Detail.Ipc
         {
             count = 0;
 
-            Logger.Stub?.PrintStub(LogClass.ServiceFriend, new { userId, offset, filter, pidPlaceholder, pid });
-
             if (userId.IsNull)
             {
                 return FriendResult.InvalidArgument;
             }
+
+            IFriendsSource source = FriendsSource.Current;
+            IReadOnlyList<FriendsSourceEntry> friends = source?.GetFriends(TimeSpan.Zero) ?? [];
+            ulong application = source?.CurrentApplicationId ?? 0;
+
+            for (int i = Math.Max(offset, 0); i < friends.Count && count < friendList.Length; i++, count++)
+            {
+                friendList[count] = MakeFriend(friends[i], application);
+            }
+
+            Logger.Info?.Print(LogClass.ServiceFriend, $"GetFriendList offset={offset} -> {count}");
 
             return Result.Success;
         }
@@ -92,9 +112,30 @@ namespace Ryujinx.Horizon.Sdk.Friends.Detail.Ipc
             ulong pidPlaceholder,
             [ClientProcessId] ulong pid)
         {
-            string friendIdList = string.Join(", ", friendIds.ToArray());
+            // One record per requested id, in the same order: the caller pairs answers with its
+            // ids by position, so an id that cannot be resolved stays an invalid record.
+            IFriendsSource source = FriendsSource.Current;
+            IReadOnlyList<FriendsSourceEntry> friends = source?.GetFriends(TimeSpan.Zero) ?? [];
+            ulong application = source?.CurrentApplicationId ?? 0;
+            int resolved = 0;
 
-            Logger.Stub?.PrintStub(LogClass.ServiceFriend, new { userId, friendIdList, pidPlaceholder, pid });
+            for (int i = 0; i < friendIds.Length && i < info.Length; i++)
+            {
+                info[i] = default;
+
+                foreach (FriendsSourceEntry friend in friends)
+                {
+                    if (friend.NetworkServiceAccountId == friendIds[i].Id)
+                    {
+                        info[i] = MakeFriend(friend, application);
+                        resolved++;
+
+                        break;
+                    }
+                }
+            }
+
+            Logger.Debug?.Print(LogClass.ServiceFriend, $"UpdateFriendInfo {friendIds.Length} id(s) -> {resolved} resolved");
 
             return Result.Success;
         }
@@ -108,7 +149,14 @@ namespace Ryujinx.Horizon.Sdk.Friends.Detail.Ipc
         {
             size = 0;
 
-            Logger.Stub?.PrintStub(LogClass.ServiceFriend, new { userId, friendId });
+            // The game does not ask again: a short wait beats a placeholder for the session.
+            byte[] jpeg = FriendsSource.Current?.GetProfileImage(friendId.Id, TimeSpan.FromMilliseconds(1500));
+
+            if (jpeg != null && jpeg.Length > 0 && jpeg.Length <= profileImage.Length)
+            {
+                jpeg.CopyTo(profileImage);
+                size = jpeg.Length;
+            }
 
             return Result.Success;
         }
@@ -127,6 +175,13 @@ namespace Ryujinx.Horizon.Sdk.Friends.Detail.Ipc
         public Result EnsureFriendListAvailable(Uid userId)
         {
             Logger.Stub?.PrintStub(LogClass.ServiceFriend, new { userId });
+
+            // nn::friends' AsyncContext waits on the completion event before reading a result.
+            // A game that clears it after one wait would wait forever on the next, and
+            // Splatoon 3 then never fetches its friend list; this command completes at once.
+            Os.SignalSystemEvent(ref _completionEvent);
+
+            FriendsSource.Current?.GetFriends(TimeSpan.Zero);
 
             return Result.Success;
         }
@@ -245,6 +300,11 @@ namespace Ryujinx.Horizon.Sdk.Friends.Detail.Ipc
         {
             Logger.Stub?.PrintStub(LogClass.ServiceFriend, new { userId, userPresence, pidPlaceholder, pid });
 
+            // The status and the app key-value storage are what a friend needs to see this
+            // player online and join them.
+            ReadOnlySpan<byte> storage = userPresence.AppKeyValueStorage;
+            FriendsSource.Current?.PublishPresence((uint)userPresence.Status, storage.ToArray());
+
             return Result.Success;
         }
 
@@ -339,9 +399,7 @@ namespace Ryujinx.Horizon.Sdk.Friends.Detail.Ipc
         [CmifCommand(20100)]
         public Result GetFriendCount(out int count, Uid userId, SizedFriendFilter filter, ulong pidPlaceholder, [ClientProcessId] ulong pid)
         {
-            count = 0;
-
-            Logger.Stub?.PrintStub(LogClass.ServiceFriend, new { userId, filter, pidPlaceholder, pid });
+            count = FriendsSource.Current?.GetFriends(TimeSpan.Zero).Count ?? 0;
 
             return Result.Success;
         }
@@ -1004,6 +1062,43 @@ namespace Ryujinx.Horizon.Sdk.Friends.Detail.Ipc
             {
                 Os.DestroySystemEvent(ref _completionEvent);
             }
+        }
+
+        private static Nickname MakeNickname(string name)
+        {
+            Array33<byte> bytes = new();
+            byte[] utf8 = Encoding.UTF8.GetBytes(name ?? "");
+            // 32 bytes at most, leaving the terminating NUL.
+            utf8.AsSpan(0, Math.Min(utf8.Length, 32)).CopyTo(bytes.AsSpan());
+
+            return new Nickname(bytes);
+        }
+
+        /// <summary>nn::friends::detail::FriendImpl for one GRID0+ friend.</summary>
+        private static FriendImpl MakeFriend(FriendsSourceEntry friend, ulong currentApplication)
+        {
+            Uid uid = new(0x1100000000000000UL, friend.NetworkServiceAccountId);
+
+            FriendImpl record = new()
+            {
+                UserId = uid,
+                NetworkUserId = new NetworkServiceAccountId(friend.NetworkServiceAccountId),
+                Nickname = MakeNickname(friend.Nickname),
+                IsFavourite = friend.IsFavorite,
+                IsValid = true,
+            };
+
+            record.Presence.UserId = uid;
+            record.Presence.LastTimeOnlineTimestamp = long.MaxValue;
+            record.Presence.Status = (PresenceStatus)friend.PresenceStatus;
+            // A friend in the same game is one the game asks about joining.
+            record.Presence.SamePresenceGroupApplication =
+                friend.PresenceStatus == 2 && friend.ApplicationId != 0 && friend.ApplicationId == currentApplication;
+
+            Span<byte> storage = record.Presence.AppKeyValueStorage;
+            friend.AppKeyValueStorage.AsSpan(0, Math.Min(friend.AppKeyValueStorage.Length, storage.Length)).CopyTo(storage);
+
+            return record;
         }
 
         public void Dispose()
