@@ -12,6 +12,8 @@ All updates to this Ryujinx branch will be documented in this file.
    opens the network settings.
  - **Network settings** are one GRID0+ group: server, NAT check address, CA, login server, login and
    password.
+ - **BCAT from GRID0+.** A game's delivery cache, such as Splatoon 3's Splatfest packs, is fetched
+   from the GRID0+ server at startup and again when a game boots, as a console's bcat sysmodule does.
  - **Friends in games.** The friend service answers with your GRID0+ friends and sends your presence,
    so Splatoon 3's friend list shows them and they can see and join you. Games get your GRID0+
    account id.
@@ -19,6 +21,7 @@ All updates to this Ryujinx branch will be documented in this file.
  - Creating a Splatoon 3 private room no longer fails with 2321-4992: a lookup of an IP address is
    answered with that address.
  - A hostname read from the guest is cut at its first NUL.
+ - Each process gets real random entropy, so two emulators no longer generate the same ids.
 
 ## [1.4.0](<https://github.com/n-popescu/Ryubing-LanPlay/releases/tag/v1.4.0>) - 2026-09-25
 ### Network:

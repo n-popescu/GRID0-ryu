@@ -497,6 +497,8 @@ namespace Ryujinx.Ava.UI.Windows
         {
             base.OnOpened(e);
 
+            Systems.Grid0.Grid0Account.SyncBcatInBackground();
+
             Initialize();
 
             _windowStartupWidthDelta = Math.Max(0, Width - ViewModel.WindowWidth);
