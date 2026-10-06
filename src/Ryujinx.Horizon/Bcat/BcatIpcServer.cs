@@ -1,4 +1,5 @@
 using Ryujinx.Horizon.Bcat.Types;
+using Ryujinx.Horizon.Sdk.Arp;
 using Ryujinx.Horizon.Sdk.Sf.Hipc;
 using Ryujinx.Horizon.Sdk.Sm;
 
@@ -15,6 +16,7 @@ namespace Ryujinx.Horizon.Bcat
         private const int MaxPortsCount = 4;
 
         private SmApi _sm;
+        private ArpApi _arp;
         private BcatServerManager _serverManager;
 
         private static readonly ManagerOptions _managerOptions = new(PointerBufferSize, MaxDomains, MaxDomainObjects, false);
@@ -26,7 +28,9 @@ namespace Ryujinx.Horizon.Bcat
             _sm = new SmApi();
             _sm.Initialize().AbortOnFailure();
 
-            _serverManager = new BcatServerManager(allocator, _sm, MaxPortsCount, _managerOptions, TotalMaxSessionsCount);
+            _arp = new ArpApi(allocator);
+
+            _serverManager = new BcatServerManager(allocator, _sm, _arp, MaxPortsCount, _managerOptions, TotalMaxSessionsCount);
 
 #pragma warning disable IDE0055 // Disable formatting
             _serverManager.RegisterServer((int)BcatPortIndex.Admin,   ServiceName.Encode("bcat:a"), MaxSessionsCount);
@@ -44,6 +48,7 @@ namespace Ryujinx.Horizon.Bcat
         public void Shutdown()
         {
             _serverManager.Dispose();
+            _arp.Dispose();
             _sm.Dispose();
         }
     }

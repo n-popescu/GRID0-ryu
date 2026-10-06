@@ -1,6 +1,7 @@
 using LibHac.Common;
 using Ryujinx.Horizon.Bcat.Types;
 using Ryujinx.Horizon.Common;
+using Ryujinx.Horizon.Sdk.Arp;
 using Ryujinx.Horizon.Sdk.Bcat;
 using Ryujinx.Horizon.Sdk.Sf;
 using System;
@@ -12,12 +13,14 @@ namespace Ryujinx.Horizon.Bcat.Ipc
     partial class ServiceCreator : IServiceCreator, IDisposable
     {
         private readonly BcatServicePermissionLevel _permissionLevel;
+        private readonly ArpApi _arp;
         private SharedRef<LibHac.Bcat.Impl.Ipc.IServiceCreator> _libHacService;
 
         private int _disposalState;
 
-        public ServiceCreator(string serviceName, BcatServicePermissionLevel permissionLevel)
+        public ServiceCreator(string serviceName, BcatServicePermissionLevel permissionLevel, ArpApi arp)
         {
+            _arp = arp;
             HorizonStatic.Options.BcatClient.Sm.GetService(ref _libHacService, serviceName).ThrowIfFailure();
             _permissionLevel = permissionLevel;
         }
@@ -39,6 +42,18 @@ namespace Ryujinx.Horizon.Bcat.Ipc
         [CmifCommand(1)]
         public Result CreateDeliveryCacheStorageService(out IDeliveryCacheStorageService service, [ClientProcessId] ulong pid)
         {
+            // A delivery cache GRID0+ delivered is served from disk; LibHac's is a save
+            // nothing fills. The caller's title comes from arp, as on hardware.
+            if (_arp != null &&
+                _arp.GetApplicationInstanceId(out ulong instanceId, pid).IsSuccess &&
+                _arp.GetApplicationLaunchProperty(out ApplicationLaunchProperty property, instanceId).IsSuccess &&
+                LocalDeliveryCache.Has(property.ApplicationId.Id))
+            {
+                service = new LocalDeliveryCacheStorageService(LocalDeliveryCache.TitlePath(property.ApplicationId.Id));
+
+                return Result.Success;
+            }
+
             using SharedRef<LibHac.Bcat.Impl.Ipc.IDeliveryCacheStorageService> libHacService = new();
 
             LibHac.Result resultCode = _libHacService.Get.CreateDeliveryCacheStorageService(ref libHacService.Ref, pid);
@@ -58,6 +73,13 @@ namespace Ryujinx.Horizon.Bcat.Ipc
         [CmifCommand(2)]
         public Result CreateDeliveryCacheStorageServiceWithApplicationId(out IDeliveryCacheStorageService service, ApplicationId applicationId)
         {
+            if (LocalDeliveryCache.Has(applicationId.Id))
+            {
+                service = new LocalDeliveryCacheStorageService(LocalDeliveryCache.TitlePath(applicationId.Id));
+
+                return Result.Success;
+            }
+
             using SharedRef<LibHac.Bcat.Impl.Ipc.IDeliveryCacheStorageService> libHacService = new();
 
             LibHac.Result resultCode = _libHacService.Get.CreateDeliveryCacheStorageServiceWithApplicationId(ref libHacService.Ref, new LibHac.ApplicationId(applicationId.Id));

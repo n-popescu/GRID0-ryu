@@ -798,6 +798,21 @@ namespace Ryujinx.Ava.Systems
 
         public async Task LoadGuestApplication(CancellationTokenSource cts, BlitStruct<ApplicationControlProperty>? customNacpData = null)
         {
+            // The game's BCAT delivery cache, as a console's bcat sysmodule would have it from
+            // GRID0+. Bounded: a server that does not answer must not hold the game back.
+            if (Grid0Account.Client() is { } grid0)
+            {
+                try
+                {
+                    using CancellationTokenSource bcatTimeout = new(TimeSpan.FromSeconds(20));
+                    await Grid0Bcat.SyncAsync(grid0, ApplicationId, bcatTimeout.Token);
+                }
+                catch (Exception e)
+                {
+                    Logger.Warning?.Print(LogClass.ServiceBcat, $"GRID0+ BCAT: not synced: {e.Message}");
+                }
+            }
+
             DiscordIntegrationModule.GuestAppStartedAt = Timestamps.Now;
 
             InitEmulatedSwitch();

@@ -208,6 +208,35 @@ namespace Ryujinx.HLE.HOS.Services.Account.Acc.SwitchNet
         }
 
         /// <summary>
+        /// GETs an emulator API path's raw bytes with the access token, or null when the server
+        /// refuses.
+        /// </summary>
+        public async Task<byte[]> GetBytesAsync(string path, CancellationToken cancellationToken)
+        {
+            string accessToken;
+
+            await _lock.WaitAsync(cancellationToken).ConfigureAwait(false);
+            try
+            {
+                await EnsureLoggedInAsync(cancellationToken).ConfigureAwait(false);
+                accessToken = _accessToken;
+            }
+            finally
+            {
+                _lock.Release();
+            }
+
+            using HttpRequestMessage request = new(HttpMethod.Get, $"https://{BaasHost}{path}");
+            request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", accessToken);
+
+            using HttpResponseMessage response = await _http.SendAsync(request, cancellationToken).ConfigureAwait(false);
+
+            return response.IsSuccessStatusCode
+                ? await response.Content.ReadAsByteArrayAsync(cancellationToken).ConfigureAwait(false)
+                : null;
+        }
+
+        /// <summary>
         /// GETs an https URL on a Nintendo host the server answers for, such as a profile
         /// picture. Every connection this client makes is dialled at the server.
         /// </summary>
