@@ -11,6 +11,8 @@ using Ryujinx.Memory;
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Security.Cryptography;
+using System.Runtime.InteropServices;
 using System.Threading;
 using ExceptionCallback = Ryujinx.Cpu.ExceptionCallback;
 using ExceptionCallbackNoArgs = Ryujinx.Cpu.ExceptionCallbackNoArgs;
@@ -518,9 +520,12 @@ namespace Ryujinx.HLE.HOS.Kernel.Process
             return result;
         }
 
-        private static void GenerateRandomEntropy()
+        private void GenerateRandomEntropy()
         {
-            // TODO.
+            // Guest SDKs seed their PRNG from GetInfo(RandomEntropy). Left at zero, every
+            // emulator generated the same "random" ids, such as the UUIDs a game puts in its
+            // saves or in its online session, so two emulators could collide.
+            RandomNumberGenerator.Fill(MemoryMarshal.AsBytes(RandomEntropy.AsSpan()));
         }
 
         public Result Start(int mainThreadPriority, ulong stackSize)
