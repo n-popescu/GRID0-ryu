@@ -50,7 +50,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <!-- GRID0+ private-server exefs IPS patches, shipped from the grid0plus-toolbox
+    <!-- GRID0+ private-server exefs IPS patches, shipped from the GRID0plus-cfw toolbox
          repo so the emulator applies them to the game in memory, with no SD-card
          exefs_patches directory. Keyed by the target build id in the file name; see
          PrivateServerSplatoon3Patches. -->

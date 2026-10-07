@@ -26,8 +26,8 @@ namespace Ryujinx.HLE.HOS
     /// </para>
     /// <para>
     /// The patch bytes are the real <c>.ips</c> files shipped in the
-    /// <see href="https://github.com/n-popescu/grid0plus-toolbox">grid0plus-toolbox</see>
-    /// repository under <c>romfs/sd/atmosphere/exefs_patches/</c> -- the exact files a real
+    /// <see href="https://github.com/GRID0-net/GRID0plus-cfw">GRID0plus-cfw</see>
+    /// repository under <c>toolbox/romfs/sd/atmosphere/exefs_patches/</c> -- the exact files a real
     /// console applies through Atmosphère. They are embedded in this assembly (see the
     /// <c>HOS\Patches\exefs_patches\**\*.ips</c> item in <c>Ryujinx.HLE.csproj</c>) and applied
     /// here in memory, so the emulator needs no SD-card <c>exefs_patches</c> directory. Only the
@@ -68,9 +68,9 @@ namespace Ryujinx.HLE.HOS
         /// as 11.3.0's <c>s3grpcverify_bypass</c> (the pinned-certificate check, 0x00157B20) and
         /// <c>s3grpcpeer_bypass</c> (the peer-hostname comparison, 0x0014E1B0 and 0x0014DD80):
         /// 11.3.0's binary only grew after both sites, so 11.2.0 shares them unchanged. The
-        /// toolbox's two newer categories (<c>s3certpin_bypass</c>, <c>s3verifyoption_bypass</c>)
-        /// sit elsewhere in the binary and have never been confirmed for these builds, so they are
-        /// not applied to them. The oldest build was only ever recorded with the certificate
+        /// toolbox's newer categories (<c>s3certpin_bypass</c>, <c>s3verifyoption_bypass</c> and
+        /// <c>s3smallmatch_bypass</c>) sit elsewhere in the binary and have never been confirmed
+        /// for these builds, so they are not applied to them. The oldest build was only ever recorded with the certificate
         /// bypass -- its peer-hostname offsets were never established -- and stays that way rather
         /// than being guessed at.
         /// </remarks>
