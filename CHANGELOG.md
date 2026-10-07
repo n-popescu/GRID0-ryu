@@ -2,6 +2,15 @@
 
 All updates to this Ryujinx branch will be documented in this file.
 
+## [1.4.4](<https://github.com/n-popescu/GRID0-ryu/releases/tag/v1.4.4>) - 2026-10-07
+### GRID0+:
+ - **Splatoon 3 can start a match with fewer than eight players.** The GRID0+ toolbox's small-match
+   patch is built in, so a match the server starts with 2, 4 or 6 players is no longer refused by
+   the game. It exists for Splatoon 3 11.3.0 only.
+ - **Splatoon 3's private-server patches are the toolbox's own `.ips` files**, so the emulator
+   applies the same bytes a patched console does, and 11.3.0 also gets the toolbox's certificate-pin
+   and verify-option patches. The two older builds keep exactly the patches they had.
+
 ## [1.4.3](<https://github.com/n-popescu/GRID0-ryu/releases/tag/v1.4.3>) - 2026-10-06
 ### GRID0+:
  - **Splatoon 3 no longer crashes at boot while a Splatfest is announced.** BCAT's
