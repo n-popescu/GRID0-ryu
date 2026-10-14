@@ -214,7 +214,16 @@ namespace Ryujinx.HLE.HOS.Services.Account.Acc.AccountService
                 return ResultCode.InvalidIdTokenCacheBufferSize;
             }
 
-            context.Memory.Write(bufferPosition, tokenData);
+            // Titles read the token as a C string, so zero the rest of their buffer
+            // instead of leaving whatever was there after it. Dragon Ball FighterZ
+            // copied those stale bytes into its Authorization header and the server
+            // rejected the request at random (NextendoNetwork/citron-nextendo
+            // 330cc6e, same bug in their emulator). The reported length stays the
+            // token's own.
+            byte[] buffer = new byte[bufferSize];
+            tokenData.CopyTo(buffer, 0);
+
+            context.Memory.Write(bufferPosition, buffer);
             context.ResponseData.Write(tokenData.Length);
 
             return ResultCode.Success;

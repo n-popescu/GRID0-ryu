@@ -2,6 +2,12 @@
 
 All updates to this Ryujinx branch will be documented in this file.
 
+## Unreleased
+### GRID0+:
+ - **The Nintendo Account id token no longer leaves stale bytes after it.** `LoadIdTokenCache` now
+   zero-fills the rest of the game's buffer, so a title that reads the token as a C string (Dragon
+   Ball FighterZ copied the leftovers into its Authorization header) gets exactly the token.
+
 ## [1.4.4](<https://github.com/n-popescu/GRID0-ryu/releases/tag/v1.4.4>) - 2026-10-07
 ### GRID0+:
  - **Splatoon 3 can start a match with fewer than eight players.** The GRID0+ toolbox's small-match
